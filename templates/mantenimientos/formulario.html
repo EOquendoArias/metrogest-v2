@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if mant else 'Nuevo' }} Mantenimiento{% endblock %}
+{% block page_title %}{{ 'Editar mantenimiento' if mant else 'Nuevo mantenimiento' }}{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/mantenimientos/equipo/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">Mantenimientos</a> /
+  {{ 'Editar' if mant else 'Nuevo' }}
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+.origen-card { border:2px solid var(--border); border-radius:10px; padding:16px; cursor:pointer; transition:all 0.2s; }
+.origen-card:hover { border-color:var(--primary); }
+.origen-card.activo { border-color:var(--primary); background:var(--info-blue-bg); }
+#campos-interno, #campos-externo { transition: all 0.2s; }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data"
+      action="{{ '/mantenimientos/' ~ mant.id ~ '/editar' if mant else '/mantenimientos/equipo/' ~ equipo.id ~ '/nuevo' }}"
+      style="max-width:800px;">
+
+  <!-- Tipo y origen -->
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-wrench"></i> Tipo de mantenimiento</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Tipo <span class="req">*</span></label>
+        <select name="tipo" class="form-control" required>
+          <option value="preventivo" {% if mant and mant.tipo == 'preventivo' %}selected{% endif %}>Preventivo — programado periódicamente</option>
+          <option value="correctivo" {% if mant and mant.tipo == 'correctivo' %}selected{% endif %}>Correctivo — por falla o daño</option>
+          <option value="predictivo" {% if mant and mant.tipo == 'predictivo' %}selected{% endif %}>Predictivo — basado en condición</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Estado</label>
+        <select name="estado" class="form-control">
+          <option value="programado" {% if not mant or mant.estado == 'programado' %}selected{% endif %}>Programado</option>
+          <option value="en_proceso" {% if mant and mant.estado == 'en_proceso' %}selected{% endif %}>En proceso</option>
+          <option value="completado" {% if mant and mant.estado == 'completado' %}selected{% endif %}>Completado</option>
+          <option value="cancelado" {% if mant and mant.estado == 'cancelado' %}selected{% endif %}>Cancelado</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Título / descripción breve <span class="req">*</span></label>
+      <input type="text" name="titulo" class="form-control" required
+             value="{{ mant.titulo if mant else '' }}"
+             placeholder="Ej: Limpieza general y verificación de sellos">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Descripción detallada</label>
+      <textarea name="descripcion" class="form-control" rows="2"
+                placeholder="Descripción del alcance del mantenimiento...">{{ mant.descripcion if mant else '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- Origen -->
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-users"></i> Quién realiza el mantenimiento</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <label class="origen-card {% if not mant or mant.origen == 'interno' %}activo{% endif %}" onclick="setOrigen('interno')">
+        <input type="radio" name="origen" value="interno" {% if not mant or mant.origen == 'interno' %}checked{% endif %} style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <i class="fas fa-user" style="font-size:22px;color:var(--primary);"></i>
+          <div>
+            <div style="font-weight:700;font-size:14px;color:var(--primary-dark);">Personal interno</div>
+            <div style="font-size:12px;color:var(--text-muted);">Técnico del laboratorio u organización</div>
+          </div>
+        </div>
+      </label>
+      <label class="origen-card {% if mant and mant.origen == 'externo' %}activo{% endif %}" onclick="setOrigen('externo')">
+        <input type="radio" name="origen" value="externo" {% if mant and mant.origen == 'externo' %}checked{% endif %} style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <i class="fas fa-building" style="font-size:22px;color:var(--accent);"></i>
+          <div>
+            <div style="font-weight:700;font-size:14px;color:var(--primary-dark);">Empresa externa</div>
+            <div style="font-size:12px;color:var(--text-muted);">Contratista, fabricante o servicio técnico</div>
+          </div>
+        </div>
+      </label>
+    </div>
+
+    <div id="campos-interno" {% if mant and mant.origen == 'externo' %}style="display:none"{% endif %}>
+      <div class="form-group">
+        <label class="form-label">Responsable interno</label>
+        <input type="text" name="responsable_interno" class="form-control"
+               value="{{ mant.responsable_interno if mant else '' }}"
+               placeholder="Nombre del técnico responsable">
+      </div>
+    </div>
+
+    <div id="campos-externo" {% if not mant or mant.origen == 'interno' %}style="display:none"{% endif %}>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Empresa / proveedor externo</label>
+          <input type="text" name="empresa_externa" class="form-control"
+                 value="{{ mant.empresa_externa if mant else '' }}"
+                 placeholder="Nombre de la empresa de servicio técnico">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Técnico / contacto</label>
+          <input type="text" name="tecnico_externo" class="form-control"
+                 value="{{ mant.tecnico_externo if mant else '' }}"
+                 placeholder="Nombre del técnico asignado">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">N° Orden de trabajo / solicitud</label>
+      <input type="text" name="orden_trabajo" class="form-control"
+             value="{{ mant.orden_trabajo if mant else '' }}" placeholder="OT-2024-001">
+    </div>
+  </div>
+
+  <!-- Fechas -->
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-calendar"></i> Fechas</div>
+    <div class="form-grid-3">
+      <div class="form-group">
+        <label class="form-label">Fecha programada</label>
+        <input type="date" name="fecha_programada" class="form-control"
+               value="{{ mant.fecha_programada.strftime('%Y-%m-%d') if mant and mant.fecha_programada else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha de inicio</label>
+        <input type="date" name="fecha_inicio" class="form-control"
+               value="{{ mant.fecha_inicio.strftime('%Y-%m-%d') if mant and mant.fecha_inicio else '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha de finalización</label>
+        <input type="date" name="fecha_fin" class="form-control"
+               value="{{ mant.fecha_fin.strftime('%Y-%m-%d') if mant and mant.fecha_fin else '' }}">
+      </div>
+    </div>
+  </div>
+
+  <!-- Detalles técnicos -->
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-clipboard-list"></i> Detalles técnicos</div>
+    <div class="form-group">
+      <label class="form-label">Falla o condición encontrada</label>
+      <textarea name="falla_encontrada" class="form-control" rows="2"
+                placeholder="Descripción del problema o condición que motivó el mantenimiento...">{{ mant.falla_encontrada if mant else '' }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Trabajo realizado</label>
+      <textarea name="trabajo_realizado" class="form-control" rows="3"
+                placeholder="Descripción detallada de todas las actividades realizadas...">{{ mant.trabajo_realizado if mant else '' }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Repuestos y materiales utilizados</label>
+      <textarea name="repuestos_utilizados" class="form-control" rows="2"
+                placeholder="Lista de repuestos, materiales o insumos utilizados...">{{ mant.repuestos_utilizados if mant else '' }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Costo del mantenimiento ($)</label>
+      <input type="number" step="0.01" name="costo" class="form-control"
+             value="{{ mant.costo if mant else '' }}" placeholder="0.00" style="max-width:200px;">
+    </div>
+  </div>
+
+  <!-- Impacto metrológico -->
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-ruler-combined"></i> Impacto metrológico</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" name="requiere_calibracion" value="true"
+               {% if mant and mant.requiere_calibracion %}checked{% endif %}
+               style="width:16px;height:16px;">
+        <span><strong>Requiere calibración</strong> posterior al mantenimiento</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" name="afecta_medicion" value="true"
+               {% if mant and mant.afecta_medicion %}checked{% endif %}
+               style="width:16px;height:16px;">
+        <span><strong>Puede afectar</strong> la exactitud de medición</span>
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observaciones metrológicas</label>
+      <textarea name="observaciones_metrologicas" class="form-control" rows="2"
+                placeholder="Impacto del mantenimiento en las características metrológicas del equipo...">{{ mant.observaciones_metrologicas if mant else '' }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Adjuntar informe / reporte</label>
+      {% if mant and mant.archivo_path %}
+      <div style="margin-bottom:8px;">
+        <a href="{{ mant.archivo_path }}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-paperclip"></i> Ver archivo actual</a>
+      </div>
+      {% endif %}
+      <input type="file" name="archivo" class="form-control" accept=".pdf,.jpg,.png,.xlsx,.docx">
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;justify-content:flex-end;">
+    <a href="/mantenimientos/equipo/{{ equipo.id }}" class="btn btn-outline"><i class="fas fa-times"></i> Cancelar</a>
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-save"></i> {{ 'Guardar cambios' if mant else 'Registrar mantenimiento' }}
+    </button>
+  </div>
+</form>
+
+{% block scripts %}
+<script>
+function setOrigen(tipo) {
+  document.querySelectorAll('.origen-card').forEach(c => c.classList.remove('activo'));
+  event.currentTarget.classList.add('activo');
+  document.getElementById('campos-interno').style.display = tipo === 'interno' ? '' : 'none';
+  document.getElementById('campos-externo').style.display = tipo === 'externo' ? '' : 'none';
+}
+</script>
+{% endblock %}
+{% endblock %}

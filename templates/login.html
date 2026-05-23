@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetroGest — Acceso</title>
+  <link rel="icon" type="image/png" href="/static/img/favicon_metrogest.png">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family:'Inter',system-ui,sans-serif;
+      background:#00132a;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+    .wrapper{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:70px;
+      width:100%;
+      max-width:980px;
+    }
+    /* LADO MARCA */
+    .brand{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:28px;
+      padding:10px 0;
+    }
+    .brand img{
+      width:100%;
+      max-width:340px;
+      height:auto;
+      filter:drop-shadow(0 8px 32px rgba(0,120,255,0.18));
+    }
+    .brand-tagline{
+      font-size:15px;font-weight:600;
+      color:rgba(255,255,255,0.55);
+      letter-spacing:0.3px;
+    }
+    .brand-features{
+      display:flex;flex-direction:column;gap:14px;
+    }
+    .brand-feature{
+      display:flex;align-items:center;gap:12px;
+    }
+    .brand-feature-icon{
+      width:36px;height:36px;border-radius:9px;flex-shrink:0;
+      display:flex;align-items:center;justify-content:center;
+      font-size:15px;
+    }
+    .brand-feature-text{
+      font-size:14px;font-weight:600;color:rgba(255,255,255,0.82);
+    }
+    .brand-feature-sub{
+      font-size:11px;color:rgba(255,255,255,0.38);margin-top:1px;
+    }
+    /* DIVISOR */
+    .divider{
+      width:1px;
+      height:380px;
+      background:linear-gradient(to bottom,transparent,rgba(255,255,255,0.14),transparent);
+      flex-shrink:0;
+    }
+    /* TARJETA LOGIN */
+    .card{
+      background:white;
+      border-radius:20px;
+      padding:40px 38px 36px;
+      width:100%;
+      max-width:390px;
+      box-shadow:0 32px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.06);
+    }
+    .card-logo{
+      display:flex;align-items:center;gap:10px;
+      margin-bottom:28px;
+      padding-bottom:22px;
+      border-bottom:1px solid #f1f5f9;
+    }
+    .card-logo-icon{
+      width:40px;height:40px;border-radius:10px;
+      background:linear-gradient(135deg,#1a4f8a,#0f3460);
+      display:flex;align-items:center;justify-content:center;
+      font-size:18px;color:white;flex-shrink:0;
+    }
+    .card-title{font-size:20px;font-weight:800;color:#0f3460;margin-bottom:2px;}
+    .card-sub{font-size:12px;color:#94a3b8;}
+    .alert-err{
+      background:#fef2f2;border:1px solid #fecaca;color:#dc2626;
+      padding:11px 14px;border-radius:10px;font-size:13px;
+      margin-bottom:20px;display:flex;align-items:center;gap:8px;
+    }
+    .fg{margin-bottom:18px}
+    label{
+      display:block;font-size:10px;font-weight:800;color:#64748b;
+      margin-bottom:6px;text-transform:uppercase;letter-spacing:0.8px;
+    }
+    .iw{position:relative}
+    .iw i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:13px;}
+    input{
+      width:100%;padding:13px 13px 13px 42px;
+      border:1.5px solid #e8eef5;border-radius:10px;
+      font-size:14px;color:#1e293b;background:#f8fafc;
+      font-family:inherit;transition:all 0.18s;
+    }
+    input:focus{
+      outline:none;border-color:#1a4f8a;background:white;
+      box-shadow:0 0 0 3px rgba(26,79,138,0.1);
+    }
+    .btn{
+      width:100%;padding:14px;
+      background:linear-gradient(135deg,#1a4f8a,#0f3460);
+      color:white;border:none;border-radius:10px;
+      font-size:14px;font-weight:700;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;gap:9px;
+      margin-top:8px;transition:all 0.18s;letter-spacing:0.3px;
+    }
+    .btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(26,79,138,0.35);}
+    .btn:active{transform:translateY(0);}
+    .soporte{
+      text-align:center;margin-top:22px;padding-top:18px;
+      border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8;line-height:1.9;
+    }
+    @media(max-width:720px){
+      .brand,.divider{display:none}
+      .card{max-width:440px;border-radius:16px;}
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="brand">
+    <img src="/static/img/icono_metrogest_largo_oscuro.png" alt="MetroGest">
+    <div class="brand-tagline">Control metrológico inteligente</div>
+    <div class="brand-features">
+      <div class="brand-feature">
+        <div class="brand-feature-icon" style="background:rgba(59,130,246,0.15);color:#60a5fa;">
+          <i class="fas fa-certificate"></i>
+        </div>
+        <div>
+          <div class="brand-feature-text">Gestión de calibraciones</div>
+          <div class="brand-feature-sub">Certificados, análisis e intervalos óptimos</div>
+        </div>
+      </div>
+      <div class="brand-feature">
+        <div class="brand-feature-icon" style="background:rgba(239,68,68,0.15);color:#f87171;">
+          <i class="fas fa-bell"></i>
+        </div>
+        <div>
+          <div class="brand-feature-text">Seguimiento de vencimientos</div>
+          <div class="brand-feature-sub">Alertas automáticas con 30 días de anticipación</div>
+        </div>
+      </div>
+      <div class="brand-feature">
+        <div class="brand-feature-icon" style="background:rgba(34,197,94,0.15);color:#4ade80;">
+          <i class="fas fa-file-shield"></i>
+        </div>
+        <div>
+          <div class="brand-feature-text">Trazabilidad documental</div>
+          <div class="brand-feature-sub">Historial completo por equipo y magnitud</div>
+        </div>
+      </div>
+      <div class="brand-feature">
+        <div class="brand-feature-icon" style="background:rgba(245,158,11,0.15);color:#fcd34d;">
+          <i class="fas fa-check-double"></i>
+        </div>
+        <div>
+          <div class="brand-feature-text">Cumplimiento metrológico</div>
+          <div class="brand-feature-sub">Alineado con ISO/IEC 10012 e ILAC G24</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="card">
+    <div class="card-logo">
+      <div class="card-logo-icon"><i class="fas fa-flask"></i></div>
+      <div>
+        <div class="card-title">Bienvenido</div>
+        <div class="card-sub">Ingresa tus credenciales para continuar</div>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="alert-err"><i class="fas fa-circle-exclamation"></i> {{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/usuarios/login">
+      <div class="fg">
+        <label>Correo electrónico</label>
+        <div class="iw">
+          <i class="fas fa-envelope"></i>
+          <input type="email" name="email" required
+                 placeholder="usuario@empresa.com" autocomplete="email">
+        </div>
+      </div>
+      <div class="fg">
+        <label>Contraseña</label>
+        <div class="iw">
+          <i class="fas fa-lock"></i>
+          <input type="password" name="password" required
+                 placeholder="••••••••" autocomplete="current-password">
+        </div>
+      </div>
+      <button type="submit" class="btn">
+        <i class="fas fa-right-to-bracket"></i> Ingresar al sistema
+      </button>
+    </form>
+
+    <div class="soporte">
+      ¿Olvidaste tu contraseña?<br>
+      Contacta al administrador de tu laboratorio<br>
+      o al soporte técnico de MetroGest
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

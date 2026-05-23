@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Nueva verificación — {{ magnitud.nombre }}{% endblock %}
+{% block page_title %}Nueva verificación intermedia{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/verificaciones/historial/{{ magnitud.id }}" style="color:var(--primary);text-decoration:none;">{{ magnitud.nombre }}</a> / Nueva
+{% endblock %}
+
+{% block content %}
+<form method="post" action="/verificaciones/nueva/{{ magnitud.id }}" enctype="multipart/form-data" style="max-width:700px;">
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-calendar"></i> Datos generales</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Fecha de verificación <span class="req">*</span></label>
+        <input type="date" name="fecha" class="form-control" required value="{{ hoy.strftime('%Y-%m-%d') }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select name="tipo" class="form-control">
+          <option value="programada">Programada (según plan)</option>
+          <option value="no_programada">No programada (por evento)</option>
+          <option value="post_mantenimiento">Post-mantenimiento</option>
+          <option value="post_calibracion">Post-calibración</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Realizada por</label>
+        <input type="text" name="realizada_por" class="form-control" placeholder="Nombre del técnico">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Patrón / material de referencia usado</label>
+        <input type="text" name="patron_usado" class="form-control"
+               value="{{ plan.patron_referencia or '' }}" placeholder="Código o descripción del patrón">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-paperclip"></i> Registro del resultado</div>
+    <div class="infobox infobox-green">
+      <i class="fas fa-info-circle"></i> Puedes subir el archivo del registro físico, ingresar los datos numéricos en el siguiente paso, o ambos.
+    </div>
+    <div class="form-group">
+      <label class="form-label">Adjuntar registro físico (opcional)</label>
+      <input type="file" name="archivo" class="form-control" accept=".pdf,.jpg,.png,.xlsx,.docx">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observaciones generales</label>
+      <textarea name="observaciones" class="form-control" rows="2"
+                placeholder="Condiciones durante la verificación, incidencias, notas..."></textarea>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;justify-content:flex-end;">
+    <a href="/verificaciones/historial/{{ magnitud.id }}" class="btn btn-outline"><i class="fas fa-times"></i> Cancelar</a>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-arrow-right"></i> Continuar → ingresar puntos</button>
+  </div>
+</form>
+{% endblock %}

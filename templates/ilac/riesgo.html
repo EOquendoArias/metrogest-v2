@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Análisis inicial ILAC-G24 — {{ magnitud.nombre }}{% endblock %}
+{% block page_title %}Análisis inicial — ILAC-G24 §5.1{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/magnitudes/equipo/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">Magnitudes</a> /
+  {{ magnitud.nombre }} / Análisis inicial ILAC
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+.factor-row{display:grid;grid-template-columns:1fr 260px;gap:14px;align-items:start;padding:12px 0;border-bottom:1px solid var(--border-light)}
+.score-row{display:flex;gap:5px}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="infobox infobox-amber" style="line-height:1.7;">
+  <strong><i class="fas fa-book"></i> ILAC-G24 §5.1 — Intervalo inicial de recalibración:</strong>
+  Se hace <strong>una sola vez</strong> con la primera calibración. Califica cada factor: 1 = riesgo alto (intervalo corto), 5 = riesgo bajo (intervalo largo).
+  El numeral §6 (revisión de intervalos) aplica solo desde la 2ª calibración.
+</div>
+
+{% if ev %}
+<div class="infobox infobox-blue" style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+  <div style="text-align:center;">
+    <div style="font-size:36px;font-weight:800;color:var(--primary);">{{ ev.intervalo_sugerido_meses }}</div>
+    <div style="font-size:11px;color:var(--text-muted);">meses sugeridos</div>
+  </div>
+  <div style="text-align:center;">
+    <div style="font-size:36px;font-weight:800;color:var(--accent);">{{ ev.intervalo_adoptado_meses }}</div>
+    <div style="font-size:11px;color:var(--text-muted);">meses adoptados</div>
+  </div>
+  <div style="flex:1;">
+    <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Puntuación: {{ ev.puntuacion_total }}/5.0</div>
+    <div class="progress-track">
+      <div class="progress-fill" style="width:{{ (ev.puntuacion_total/5*100)|int }}%;background:{% if ev.puntuacion_total<2 %}var(--danger){% elif ev.puntuacion_total<3 %}var(--warning){% else %}var(--success){% endif %};"></div>
+    </div>
+    {% if ev.evaluado_por %}<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Evaluado por: {{ ev.evaluado_por }} · {{ ev.fecha_evaluacion.strftime('%d/%m/%Y') if ev.fecha_evaluacion else '' }}</div>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+<form method="post" action="/ilac/riesgo/{{ magnitud.id }}">
+  <div class="card mb-4">
+    <div class="card-header"><span class="card-title"><i class="fas fa-shield-halved" style="color:var(--primary);margin-right:8px;"></i>14 factores de riesgo — ILAC-G24 §5.1</span></div>
+    <div class="card-body">
+
+      {% set factores = [
+        ('a)','Incertidumbre de medición requerida','Nivel de exactitud exigido por el proceso. Alta exigencia → mayor frecuencia.','f_incertidumbre'),
+        ('b)','Tipo de instrumento','Patrón de referencia, trabajo o indicador. Los patrones requieren mayor frecuencia.','f_tipo'),
+        ('c)','Riesgo de superar el EMP','Probabilidad de que el equipo derive fuera de su EMP entre calibraciones.','f_riesgo_emp'),
+        ('d)','Recomendación del fabricante','Intervalo recomendado por el fabricante (ver campo abajo).','f_fabricante'),
+        ('e)','Tendencia al desgaste y deriva','Estabilidad temporal del instrumento.','f_deriva'),
+        ('f)','Intensidad de uso','Frecuencia e intensidad de uso en el proceso.','f_uso'),
+        ('g)','Condiciones ambientales','Temperatura, humedad, vibraciones, polvo, corrosión en el lugar de uso.','f_ambiental'),
+        ('h)','Influencia de la magnitud medida','Efectos físicos sobre el instrumento durante la medición.','f_magnitud'),
+        ('i)','Datos de dispositivos similares','Información publicada sobre este tipo de instrumento.','f_similares'),
+        ('j)','Frecuencia de comparaciones','Con qué frecuencia se compara con otros patrones.','f_comparaciones'),
+        ('k)','Verificaciones intermedias','Si existen comprobaciones periódicas entre calibraciones.','f_verificaciones'),
+        ('l)','Riesgo de transporte','El equipo se transporta o usa en campo.','f_transporte'),
+        ('m)','Capacitación del personal','Nivel de formación de los usuarios del instrumento.','f_personal'),
+        ('n)','Requisitos legales','Normativas o reglamentos que establezcan intervalos máximos.','f_legal'),
+      ] %}
+
+      {% for ref, titulo, desc, campo in factores %}
+      {% set val_actual = ev[campo] if ev else 3 %}
+      <div class="factor-row">
+        <div>
+          <div style="font-size:11px;color:var(--primary);font-weight:700;">§5.1 {{ ref }}</div>
+          <div style="font-size:13px;font-weight:700;color:var(--primary-dark);">{{ titulo }}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">{{ desc }}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;">Nivel de riesgo</div>
+          <div class="score-row" id="grp-{{ campo }}">
+            {% for i in range(1,6) %}
+            <button type="button" class="score-btn {% if val_actual==i %}sel-{{ i }}{% endif %}"
+                    onclick="setScore('{{ campo }}',{{ i }},this)" title="{{ ['','Muy alto','Alto','Medio','Bajo','Muy bajo'][i] }}">{{ i }}</button>
+            {% endfor %}
+          </div>
+          <input type="hidden" name="{{ campo }}" id="inp-{{ campo }}" value="{{ val_actual }}">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:3px;">
+            <span>1 = Riesgo alto</span><span>5 = Riesgo bajo</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      {# Fabricante especial #}
+      <div style="padding:12px 0;border-top:1px solid #f1f5f9;margin-top:4px;">
+        <label class="form-label">Intervalo recomendado por el fabricante (meses) — §5.1 d)</label>
+        <input type="number" name="intervalo_fabricante_meses" class="form-control"
+               value="{{ ev.intervalo_fabricante_meses if ev and ev.intervalo_fabricante_meses else '' }}"
+               placeholder="Ej: 12" style="max-width:200px;" oninput="calcular()">
+        <div class="form-hint">Del manual o datasheet. Si es más corto que el sugerido, prevalece.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header"><span class="card-title"><i class="fas fa-calculator" style="color:var(--accent);margin-right:8px;"></i>Decisión del intervalo inicial</span></div>
+    <div class="card-body">
+      <div id="preview" class="infobox infobox-green">
+        <i class="fas fa-info-circle"></i> Completa los factores para ver el intervalo sugerido.
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Intervalo adoptado (meses) <span class="req">*</span></label>
+          <input type="number" name="intervalo_adoptado_meses" id="inp-adoptado" class="form-control"
+                 value="{{ ev.intervalo_adoptado_meses if ev else 12 }}" min="1" max="120">
+          <div class="form-hint">Puedes ajustar el valor sugerido según criterio profesional</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Evaluado por</label>
+          <input type="text" name="evaluado_por" class="form-control"
+                 value="{{ ev.evaluado_por if ev else '' }}" placeholder="Nombre del metrólogo">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Justificación de la decisión</label>
+        <textarea name="justificacion" class="form-control" rows="3"
+                  placeholder="Fundamento técnico para el intervalo adoptado...">{{ ev.justificacion if ev else '' }}</textarea>
+      </div>
+      <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar evaluación de riesgo</button>
+    </div>
+  </div>
+</form>
+
+{% block scripts %}
+<script>
+const CAMPOS=["f_incertidumbre","f_tipo","f_riesgo_emp","f_fabricante","f_deriva","f_uso","f_ambiental","f_magnitud","f_similares","f_comparaciones","f_verificaciones","f_transporte","f_personal","f_legal"];
+function setScore(name,val,btn){
+  document.getElementById('inp-'+name).value=val;
+  document.getElementById('grp-'+name).querySelectorAll('.score-btn').forEach((b,i)=>{b.className='score-btn';if(i+1===val)b.classList.add('sel-'+val)});
+  calcular();
+}
+function calcular(){
+  let tot=0;CAMPOS.forEach(n=>{tot+=parseInt(document.getElementById('inp-'+n)?.value||3)});
+  const avg=tot/CAMPOS.length;
+  const fab=parseInt(document.querySelector('[name=intervalo_fabricante_meses]')?.value||0);
+  let base=avg<=1.5?3:avg<=2?6:avg<=2.5?9:avg<=3?12:avg<=3.5?18:avg<=4?24:36;
+  if(fab>0&&fab<base)base=fab;
+  const col=avg<=2?'#dc2626':avg<=3?'#d97706':'#16a34a';
+  const niv=avg<=1.5?'Muy alto':avg<=2.5?'Alto':avg<=3.5?'Medio':avg<=4.5?'Bajo':'Muy bajo';
+  document.getElementById('preview').innerHTML=`<i class='fas fa-calculator'></i> Promedio: <strong style='color:${col}'>${avg.toFixed(2)}/5.0 — Riesgo ${niv}</strong> · Intervalo sugerido: <strong style='color:var(--primary)'>${base} meses</strong>`;
+  document.getElementById('inp-adoptado').value=base;
+}
+document.addEventListener('DOMContentLoaded',calcular);
+document.querySelector('[name=intervalo_fabricante_meses]')?.addEventListener('input',calcular);
+</script>
+{% endblock %}
+{% endblock %}

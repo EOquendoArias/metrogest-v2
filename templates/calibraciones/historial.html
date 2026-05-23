@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Calibraciones — {{ magnitud.nombre }}{% endblock %}
+{% block page_title %}{{ magnitud.nombre }}{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/magnitudes/equipo/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">Magnitudes</a> /
+  {{ magnitud.nombre }}
+{% endblock %}
+{% block topbar_actions %}
+{% if usuario_actual.rol != 'solo_lectura' %}
+<a href="/calibraciones/magnitud/{{ magnitud.id }}/nueva" class="btn btn-accent btn-sm"><i class="fas fa-plus"></i> Nueva calibración</a>
+{% endif %}
+<a href="/verificaciones/historial/{{ magnitud.id }}" class="btn btn-outline btn-sm"><i class="fas fa-check-double"></i> Verificaciones</a>
+<a href="/ilac/frecuencias/{{ magnitud.id }}" class="btn btn-outline btn-sm"><i class="fas fa-clock-rotate-left"></i> Frecuencias de Calibración</a>
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      {% for lbl,val in [('Unidad',magnitud.unidad or '—'),('Rango',(magnitud.rango_min|string ~ ' a ' ~ magnitud.rango_max|string ~ ' ' ~ (magnitud.unidad or '')) if magnitud.rango_min is not none else '—'),('Resolución',magnitud.resolucion or '—'),('EMP',magnitud.emp_texto or '—')] %}
+      <div style="text-align:center;padding:10px;background:var(--bg-inset);border-radius:8px;">
+        <div style="font-size:10px;color:var(--text-muted);">{{ lbl }}</div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary-dark);">{{ val }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><span class="card-title"><i class="fas fa-certificate" style="color:var(--accent);margin-right:8px;"></i>Historial de calibraciones ({{ calibraciones|length }})</span></div>
+  {% if calibraciones %}
+  <div style="overflow-x:auto;">
+    <table class="table" style="font-size:12px;">
+      <thead><tr><th>Fecha</th><th>Certificado</th><th>Laboratorio</th><th>Resultado</th><th>Próxima</th><th>PDF cert.</th><th>Análisis</th></tr></thead>
+      <tbody>
+        {% for c in calibraciones %}
+        {% set rc={'aprobado':'success','no_aprobado':'danger','pendiente':'warning'}.get(c.resultado,'secondary') %}
+        <tr>
+          <td style="font-weight:600;">{{ c.fecha_calibracion.strftime('%d/%m/%Y') }}</td>
+          <td>{{ c.numero_certificado or '—' }}</td>
+          <td>{{ c.laboratorio or '—' }}</td>
+          <td><span class="badge badge-{{ rc }}" style="font-size:10px;">{{ c.resultado or 'Pendiente' }}</span></td>
+          <td>{% if c.proxima_calibracion %}{% set dm=(c.proxima_calibracion-hoy).days %}<span style="color:{% if dm<0 %}var(--danger){% elif dm<=30 %}var(--warning){% else %}var(--text){% endif %};">{{ c.proxima_calibracion.strftime('%d/%m/%Y') }}</span>{% else %}Por definir{% endif %}</td>
+          <td>{% if c.certificado_path %}<a href="{{ c.certificado_path }}" target="_blank" class="btn btn-outline btn-sm" style="padding:2px 7px;"><i class="fas fa-file-pdf"></i></a>{% else %}—{% endif %}</td>
+          <td><a href="/analisis/{{ c.id }}" class="btn btn-primary btn-sm" style="padding:2px 8px;"><i class="fas fa-chart-line"></i> Analizar</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body" style="text-align:center;padding:40px;color:var(--text-muted);">
+    <i class="fas fa-certificate" style="font-size:40px;opacity:0.3;display:block;margin-bottom:12px;"></i>
+    Sin calibraciones registradas.
+    <a href="/calibraciones/magnitud/{{ magnitud.id }}/nueva" style="display:block;margin-top:12px;" class="btn btn-accent">Registrar primera calibración</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Plan de mantenimiento — {{ equipo.nombre }}{% endblock %}
+{% block page_title %}Plan de mantenimiento preventivo{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/mantenimientos/equipo/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">Mantenimientos</a> /
+  Plan preventivo
+{% endblock %}
+
+{% block content %}
+
+{% if plan %}
+<div class="card mb-4">
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+      <div style="text-align:center;padding:12px;background:var(--bg-inset);border-radius:8px;">
+        <div style="font-size:10px;color:var(--text-muted);">Frecuencia</div>
+        <div style="font-size:18px;font-weight:800;color:var(--primary-dark);">Cada {{ plan.frecuencia_meses }} meses</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:var(--bg-inset);border-radius:8px;">
+        <div style="font-size:10px;color:var(--text-muted);">Tipo</div>
+        <div style="font-size:15px;font-weight:700;color:var(--primary-dark);">{{ plan.tipo.title() if plan.tipo else 'Preventivo' }}</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:var(--bg-inset);border-radius:8px;">
+        <div style="font-size:10px;color:var(--text-muted);">Responsable</div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary-dark);">{{ plan.responsable or '—' }}</div>
+      </div>
+      <div style="text-align:center;padding:12px;
+                  background:{% if dias is not none and dias < 0 %}var(--sem-fail-bg){% elif dias is not none and dias <= 30 %}var(--info-amber-bg){% else %}var(--sem-ok-bg){% endif %};
+                  border-radius:8px;">
+        <div style="font-size:10px;color:var(--text-muted);">Próximo mantenimiento</div>
+        {% if proxima %}
+        <div style="font-size:15px;font-weight:800;
+                    color:{% if dias < 0 %}var(--danger){% elif dias <= 30 %}var(--warning){% else %}var(--success){% endif %};">
+          {{ proxima.strftime('%d/%m/%Y') }}
+        </div>
+        <div style="font-size:11px;color:{% if dias < 0 %}var(--danger){% elif dias <= 30 %}var(--warning){% else %}var(--text-muted){% endif %};">
+          {% if dias < 0 %}⚠ Vencido hace {{ dias|abs }}d
+          {% elif dias == 0 %}¡Hoy!
+          {% else %}En {{ dias }} días{% endif %}
+        </div>
+        {% else %}
+        <div style="font-size:13px;color:var(--text-muted);">Sin programar</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="infobox infobox-amber">
+  <i class="fas fa-info-circle"></i>
+  <strong>Sin plan configurado.</strong>
+  Define la frecuencia de mantenimiento preventivo. El sistema calculará automáticamente la próxima fecha.
+  <br><br>
+  <strong>Sugerencia:</strong> Para este equipo se recomienda mantenimiento cada
+  <strong>{{ sugerencia }} meses</strong> (la mitad del período de calibración).
+</div>
+{% endif %}
+
+<form method="post" action="/plan-mantenimiento/equipo/{{ equipo.id }}" style="max-width:680px;">
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-calendar-check"></i> Configuración</div>
+
+    <div class="form-group">
+      <label class="form-label">Frecuencia de mantenimiento preventivo <span class="req">*</span></label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <select name="frecuencia_meses" class="form-control" style="max-width:260px;">
+          {% for meses, label in [(1,'Mensual'),(2,'Bimestral'),(3,'Trimestral'),(4,'Cuatrimestral'),(6,'Semestral'),(12,'Anual'),(18,'Cada 18 meses'),(24,'Cada 2 años')] %}
+          <option value="{{ meses }}" {% if plan and plan.frecuencia_meses==meses %}selected{% elif not plan and meses==sugerencia %}selected{% endif %}>
+            {{ label }} (cada {{ meses }} meses)
+          </option>
+          {% endfor %}
+        </select>
+        <div style="font-size:12px;color:var(--text-muted);">
+          <i class="fas fa-lightbulb" style="color:var(--accent);"></i>
+          Sugerido: cada <strong>{{ sugerencia }} meses</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Tipo de mantenimiento</label>
+        <select name="tipo" class="form-control">
+          {% for val, label in [('preventivo','Preventivo'),('predictivo','Predictivo'),('correctivo','Correctivo')] %}
+          <option value="{{ val }}" {% if plan and plan.tipo==val %}selected{% elif not plan and val=='preventivo' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">¿Plan activo?</label>
+        <select name="activo" class="form-control">
+          <option value="true" {% if not plan or plan.activo %}selected{% endif %}>Sí — aparece en calendario</option>
+          <option value="false" {% if plan and not plan.activo %}selected{% endif %}>No — desactivado</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Responsable</label>
+      <input type="text" name="responsable" class="form-control"
+             value="{{ plan.responsable if plan else '' }}"
+             placeholder="Técnico o empresa responsable">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Descripción / actividades del mantenimiento</label>
+      <textarea name="descripcion" class="form-control" rows="4"
+                placeholder="- Limpieza general&#10;- Verificación de sellos&#10;- Revisión de conexiones&#10;...">{{ plan.descripcion if plan else '' }}</textarea>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;justify-content:flex-end;">
+    <a href="/mantenimientos/equipo/{{ equipo.id }}" class="btn btn-outline">
+      <i class="fas fa-times"></i> Cancelar
+    </a>
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-save"></i> {{ 'Actualizar plan' if plan else 'Crear plan' }}
+    </button>
+  </div>
+</form>
+
+{% if plan and plan.descripcion %}
+<div class="card mt-4" style="border-left:4px solid var(--accent);">
+  <div class="card-header">
+    <span class="card-title"><i class="fas fa-clipboard-list" style="color:var(--accent);margin-right:8px;"></i>Actividades del plan vigente</span>
+    <a href="/mantenimientos/equipo/{{ equipo.id }}/nuevo" class="btn btn-accent btn-sm">
+      <i class="fas fa-plus"></i> Registrar mantenimiento
+    </a>
+  </div>
+  <div class="card-body" style="font-size:13px;color:var(--text);white-space:pre-line;">{{ plan.descripcion }}</div>
+</div>
+{% endif %}
+{% endblock %}

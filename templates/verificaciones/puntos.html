@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Puntos de verificación{% endblock %}
+{% block page_title %}Puntos de verificación{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/verificaciones/historial/{{ magnitud.id }}" style="color:var(--primary);text-decoration:none;">{{ magnitud.nombre }}</a> /
+  Verificación {{ verificacion.fecha.strftime('%d/%m/%Y') }}
+{% endblock %}
+{% block topbar_actions %}
+<a href="/verificaciones/{{ verificacion.id }}/pdf" target="_blank" class="btn btn-outline btn-sm">
+  <i class="fas fa-file-pdf"></i> PDF
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- Info verificación -->
+<div class="card mb-4">
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      {% for label, val in [
+        ('Fecha', verificacion.fecha.strftime('%d/%m/%Y')),
+        ('Patrón usado', verificacion.patron_usado or plan.patron_referencia or '—'),
+        ('Realizada por', verificacion.realizada_por or '—'),
+        ('EMP magnitud', (magnitud.exactitud_requerida or '—') ~ (' (' ~ emp|string ~ ' ' ~ (magnitud.emp_unidad or '') ~ ')' if emp else '')),
+      ] %}
+      <div style="text-align:center;padding:10px;background:var(--bg-inset);border-radius:8px;">
+        <div style="font-size:11px;color:var(--text-muted);">{{ label }}</div>
+        <div style="font-size:13px;font-weight:700;">{{ val }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if verificacion.resultado and verificacion.resultado != 'pendiente' %}
+    <div style="margin-top:12px;text-align:center;">
+      {% set res_map = {'aprobado':('success','✓ APROBADO'),'alerta':('warning','⚠ ALERTA'),'reprobado':('danger','✗ FUERA DE LÍMITE')} %}
+      {% set rc, rt = res_map.get(verificacion.resultado, ('secondary','PENDIENTE')) %}
+      <span class="badge badge-{{ rc }}" style="font-size:14px;padding:8px 20px;">
+        {{ rt }}
+        {% if verificacion.max_desviacion_pct is not none %} — Desviación máx: {{ '%.1f'|format(verificacion.max_desviacion_pct) }}% del EMP{% endif %}
+      </span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid-2 mb-4" style="align-items:start;">
+  <!-- Formulario agregar punto -->
+  {% if usuario_actual.rol != 'solo_lectura' %}
+  <div class="card">
+    <div class="card-header"><span class="card-title"><i class="fas fa-plus-circle" style="color:var(--primary);margin-right:6px;"></i>Agregar punto</span></div>
+    <div class="card-body">
+      <form method="post" action="/verificaciones/{{ verificacion.id }}/punto">
+        <div class="form-group">
+          <label class="form-label">Valor patrón <span class="req">*</span></label>
+          <input type="number" step="any" name="valor_patron" class="form-control" required placeholder="{{ magnitud.unidad or '' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valor indicado <span class="req">*</span></label>
+          <input type="number" step="any" name="valor_indicado" class="form-control" required placeholder="Lectura del equipo">
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Tolerancia inferior</label>
+            <input type="number" step="any" name="tolerancia_inf" class="form-control" placeholder="Usa EMP si vacío">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tolerancia superior</label>
+            <input type="number" step="any" name="tolerancia_sup" class="form-control" placeholder="Usa EMP si vacío">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Observación</label>
+          <input type="text" name="observacion" class="form-control" placeholder="Opcional">
+        </div>
+        <button type="submit" class="btn btn-primary w-full"><i class="fas fa-plus"></i> Agregar punto</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tabla de puntos -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Puntos registrados ({{ puntos|length }})</span></div>
+    {% if puntos %}
+    <div style="overflow-x:auto;">
+      <table class="table" style="font-size:12px;">
+        <thead>
+          <tr><th>#</th><th>Patrón</th><th>Indicado</th><th>Error</th><th>% EMP</th><th>Resultado</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for p in puntos %}
+          <tr style="background:{% if p.resultado=='ok' %}var(--sem-ok-bg){% elif p.resultado=='alerta' %}var(--sem-nd-bg){% elif p.resultado=='fuera' %}var(--sem-fail-bg){% else %}transparent{% endif %};">
+            <td>{{ p.numero_punto }}</td>
+            <td>{{ p.valor_patron }}</td>
+            <td>{{ p.valor_indicado }}</td>
+            <td style="font-weight:700;">{{ '%+.5g'|format(p.error) if p.error is not none else '—' }}</td>
+            <td>
+              {% if p.desviacion_pct is not none %}
+              <span style="font-weight:700;color:{% if p.resultado=='fuera' %}var(--danger){% elif p.resultado=='alerta' %}var(--warning){% else %}var(--success){% endif %};">
+                {{ '%.1f'|format(p.desviacion_pct) }}%
+              </span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if p.resultado == 'ok' %}<span style="color:var(--success);font-weight:700;">✓ OK</span>
+              {% elif p.resultado == 'alerta' %}<span style="color:var(--warning);font-weight:700;">⚠ Alerta</span>
+              {% elif p.resultado == 'fuera' %}<span style="color:var(--danger);font-weight:700;">✗ Fuera</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if usuario_actual.rol != 'solo_lectura' %}
+              <form method="post" action="/verificaciones/{{ verificacion.id }}/punto/{{ p.id }}/eliminar" onsubmit="return confirm('¿Eliminar?')">
+                <button type="submit" class="btn btn-sm btn-danger" style="padding:2px 7px;"><i class="fas fa-trash"></i></button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card-body" style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px;">
+      Agrega los puntos medidos durante la verificación.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Cerrar verificación -->
+{% if usuario_actual.rol != 'solo_lectura' %}
+<div class="card">
+  <div class="card-header"><span class="card-title"><i class="fas fa-check-circle" style="color:var(--primary);margin-right:6px;"></i>Acción tomada y cierre</span></div>
+  <div class="card-body">
+    <form method="post" action="/verificaciones/{{ verificacion.id }}/cerrar">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Acción tomada</label>
+          <select name="accion_tomada" class="form-control">
+            <option value="ninguna" {% if verificacion.accion_tomada == 'ninguna' %}selected{% endif %}>Ninguna — equipo continúa en uso normal</option>
+            <option value="calibracion_anticipada" {% if verificacion.accion_tomada == 'calibracion_anticipada' %}selected{% endif %}>Calibración anticipada obligatoria</option>
+            <option value="restriccion_rango" {% if verificacion.accion_tomada == 'restriccion_rango' %}selected{% endif %}>Restricción de rango de uso</option>
+            <option value="aumento_frecuencia" {% if verificacion.accion_tomada == 'aumento_frecuencia' %}selected{% endif %}>Aumento de frecuencia de verificaciones</option>
+            <option value="notificacion_responsable" {% if verificacion.accion_tomada == 'notificacion_responsable' %}selected{% endif %}>Notificación al responsable para decisión</option>
+            <option value="monitoreo" {% if verificacion.accion_tomada == 'monitoreo' %}selected{% endif %}>Monitoreo continuo — próxima verificación anticipada</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Observaciones finales</label>
+          <input type="text" name="observaciones" class="form-control"
+                 value="{{ verificacion.observaciones or '' }}" placeholder="Conclusiones, decisiones tomadas...">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar y cerrar verificación</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

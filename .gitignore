@@ -1,0 +1,128 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.pyo
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ─── Entornos virtuales ────────────────────────────────────────────────────────
+venv/
+env/
+ENV/
+.venv/
+.env/
+virtualenv/
+
+# ─── Variables de entorno y configuración sensible ────────────────────────────
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+
+# ─── Base de datos ────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+metrogest.db
+
+# ─── Sistema de licencias ─────────────────────────────────────────────────────
+# NUNCA subir licencias de clientes al repositorio
+licencia.json
+licencia_*.json
+
+# ─── Archivos subidos por usuarios ────────────────────────────────────────────
+static/uploads/
+static/certificados/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── IDEs ─────────────────────────────────────────────────────────────────────
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim/Neovim
+*.swp
+*.swo
+*~
+Session.vim
+
+# ─── Sistema operativo ────────────────────────────────────────────────────────
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.nfs*
+
+# ─── Pytest y cobertura ───────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ─── Jupyter Notebooks ────────────────────────────────────────────────────────
+.ipynb_checkpoints
+*.ipynb
+
+# ─── Distribución / empaquetado ───────────────────────────────────────────────
+*.spec
+dist/
+build/
+
+# ─── Otros ────────────────────────────────────────────────────────────────────
+*.bak
+*.tmp
+*.orig

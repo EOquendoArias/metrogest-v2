@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Plan de verificaciones — {{ magnitud.nombre }}{% endblock %}
+{% block page_title %}Plan de verificaciones intermedias{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/magnitudes/equipo/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">Magnitudes</a> /
+  {{ magnitud.nombre }} / Plan
+{% endblock %}
+
+{% block content %}
+<div class="infobox infobox-blue">
+  <i class="fas fa-info-circle"></i> <strong>ISO/IEC 17025 §6.4.10:</strong> Las verificaciones intermedias son obligatorias o deben justificarse documentalmente por qué no se realizan. Define aquí la decisión para <strong>{{ magnitud.nombre }}</strong>.
+</div>
+
+<form method="post" action="/verificaciones/plan/{{ magnitud.id }}" style="max-width:720px;" id="form-plan">
+
+  {# ── Pregunta principal ──────────────────────────────────────────── #}
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-circle-question"></i> Decisión sobre verificaciones</div>
+    <div class="form-group">
+      <label class="form-label" style="font-size:14px;font-weight:700;">¿Se realizan verificaciones intermedias? <span class="req">*</span></label>
+      <div style="display:flex;gap:12px;margin-top:8px;">
+        <label style="flex:1;cursor:pointer;">
+          <input type="radio" name="activo" value="true" id="opt-si"
+                 {% if not plan or plan.activo %}checked{% endif %}
+                 onchange="togglePlan()" style="display:none;">
+          <div class="opt-card" id="card-si" style="padding:16px 20px;border-radius:10px;border:2px solid {% if not plan or plan.activo %}var(--primary){% else %}var(--border){% endif %};background:{% if not plan or plan.activo %}rgba(31,111,235,0.07){% else %}var(--bg-inset){% endif %};display:flex;align-items:center;gap:12px;transition:all .2s;">
+            <i class="fas fa-check-circle" style="font-size:20px;color:{% if not plan or plan.activo %}var(--primary){% else %}var(--text-muted){% endif %};" id="ico-si"></i>
+            <div>
+              <div style="font-weight:700;font-size:14px;color:var(--text);">Sí — se realizan</div>
+              <div style="font-size:12px;color:var(--text-muted);">Definir frecuencia, procedimiento y umbrales</div>
+            </div>
+          </div>
+        </label>
+        <label style="flex:1;cursor:pointer;">
+          <input type="radio" name="activo" value="false" id="opt-no"
+                 {% if plan and not plan.activo %}checked{% endif %}
+                 onchange="togglePlan()" style="display:none;">
+          <div class="opt-card" id="card-no" style="padding:16px 20px;border-radius:10px;border:2px solid {% if plan and not plan.activo %}var(--warning){% else %}var(--border){% endif %};background:{% if plan and not plan.activo %}rgba(245,158,11,0.07){% else %}var(--bg-inset){% endif %};display:flex;align-items:center;gap:12px;transition:all .2s;">
+            <i class="fas fa-ban" style="font-size:20px;color:{% if plan and not plan.activo %}var(--warning){% else %}var(--text-muted){% endif %};" id="ico-no"></i>
+            <div>
+              <div style="font-weight:700;font-size:14px;color:var(--text);">No — justificado</div>
+              <div style="font-size:12px;color:var(--text-muted);">Documentar el motivo según §6.4.10</div>
+            </div>
+          </div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  {# ── Sección SI ──────────────────────────────────────────────────── #}
+  <div id="seccion-si" style="display:{% if not plan or plan.activo %}block{% else %}none{% endif %};">
+    <div class="form-section">
+      <div class="form-section-title"><i class="fas fa-calendar-check"></i> Configuración del plan</div>
+      <div class="form-group">
+        <label class="form-label">Frecuencia de verificación <span class="req">*</span></label>
+        <select name="frecuencia_meses" class="form-control" id="sel-frecuencia">
+          {% for meses, label in [(1,'Mensual'),(2,'Bimestral'),(3,'Trimestral'),(4,'Cuatrimestral'),(6,'Semestral'),(12,'Anual')] %}
+          <option value="{{ meses }}" {% if plan and plan.frecuencia_meses == meses %}selected{% endif %}>{{ label }} (cada {{ meses }} meses)</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Procedimiento / norma a seguir</label>
+        <textarea name="procedimiento" class="form-control" rows="3"
+                  placeholder="Ej: Procedimiento interno PR-MET-003 · NTC-ISO 10012 Anexo B · comparación directa con patrón...">{{ plan.procedimiento if plan else '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Patrón o material de referencia a utilizar</label>
+        <input type="text" name="patron_referencia" class="form-control"
+               value="{{ plan.patron_referencia if plan else '' }}"
+               placeholder="Ej: Termómetro patrón PT-100 serie 1234 / Pesa patrón clase E2">
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title"><i class="fas fa-sliders"></i> Umbrales de alerta — % del EMP</div>
+      <div class="infobox infobox-amber" style="margin-bottom:16px;padding:10px 14px;font-size:12px;border-radius:8px;">
+        <i class="fas fa-triangle-exclamation"></i>
+        EMP de la magnitud: <strong>{{ magnitud.exactitud_requerida or '—' }}</strong>{% if magnitud.emp_valor %} ({{ magnitud.emp_valor }} {{ magnitud.emp_unidad or '' }}){% endif %}.
+        Si el error supera el umbral amarillo → alerta. Si supera el umbral rojo → fuera de límite.
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Umbral alerta amarilla (%)</label>
+          <input type="number" step="0.1" min="1" max="100" name="umbral_alerta_pct" class="form-control"
+                 value="{{ plan.umbral_alerta_pct if plan else 70 }}">
+          <div class="form-hint">Ej: 70% → error supera el 70% del EMP → alerta</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Umbral fuera de límite rojo (%)</label>
+          <input type="number" step="0.1" min="1" max="200" name="umbral_fuera_pct" class="form-control"
+                 value="{{ plan.umbral_fuera_pct if plan else 100 }}">
+          <div class="form-hint">Ej: 100% → error igual o mayor al EMP → fuera</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Sección NO ──────────────────────────────────────────────────── #}
+  <div id="seccion-no" style="display:{% if plan and not plan.activo %}block{% else %}none{% endif %};">
+    <div class="form-section">
+      <div class="form-section-title"><i class="fas fa-file-circle-xmark"></i> Justificación documentada</div>
+      <div class="infobox infobox-amber" style="margin-bottom:16px;">
+        <i class="fas fa-triangle-exclamation"></i>
+        ISO/IEC 17025 §6.4.10 exige que la decisión de no realizar verificaciones quede documentada con justificación técnica. Este registro queda almacenado y es visible en la sección de verificaciones del equipo.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Motivo por el que no se realizan verificaciones intermedias <span class="req">*</span></label>
+        <textarea name="justificacion_no_aplica" id="txt-justificacion" class="form-control" rows="4"
+                  placeholder="Ej: El equipo solo se usa para mediciones de referencia con calibración anual obligatoria, no requiere verificación intermedia porque... / El fabricante certifica estabilidad sin deriva entre calibraciones...">{{ plan.justificacion_no_aplica if plan else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  {# ── Aprobación del plan (siempre visible) ───────────────────────── #}
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-user-check"></i> Aprobación del plan</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+      <div class="form-group">
+        <label class="form-label">Nombre de quien aprueba</label>
+        <input type="text" name="aprobado_por_nombre" class="form-control"
+               value="{{ plan.aprobado_por_nombre if plan else '' }}"
+               placeholder="Nombre completo">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cargo</label>
+        <input type="text" name="aprobado_por_cargo" class="form-control"
+               value="{{ plan.aprobado_por_cargo if plan else '' }}"
+               placeholder="Ej: Responsable de metrología">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha de aprobación</label>
+        <input type="date" name="fecha_aprobacion" class="form-control"
+               value="{{ plan.fecha_aprobacion.isoformat() if plan and plan.fecha_aprobacion else '' }}">
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;justify-content:flex-end;">
+    <a href="/verificaciones/historial/{{ magnitud.id }}" class="btn btn-outline"><i class="fas fa-times"></i> Cancelar</a>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar plan</button>
+  </div>
+</form>
+
+<script>
+function togglePlan() {
+  const si = document.getElementById('opt-si').checked;
+
+  // Secciones
+  document.getElementById('seccion-si').style.display = si ? 'block' : 'none';
+  document.getElementById('seccion-no').style.display = si ? 'none' : 'block';
+
+  // Card SI
+  document.getElementById('card-si').style.borderColor  = si ? 'var(--primary)' : 'var(--border)';
+  document.getElementById('card-si').style.background   = si ? 'rgba(31,111,235,0.07)' : 'var(--bg-inset)';
+  document.getElementById('ico-si').style.color         = si ? 'var(--primary)' : 'var(--text-muted)';
+
+  // Card NO
+  document.getElementById('card-no').style.borderColor  = si ? 'var(--border)' : 'var(--warning)';
+  document.getElementById('card-no').style.background   = si ? 'var(--bg-inset)' : 'rgba(245,158,11,0.07)';
+  document.getElementById('ico-no').style.color         = si ? 'var(--text-muted)' : 'var(--warning)';
+
+  // Required para justificación
+  document.getElementById('txt-justificacion').required = !si;
+}
+
+// Inicializar al cargar
+togglePlan();
+</script>
+{% endblock %}

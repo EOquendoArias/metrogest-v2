@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Nuevo período de calibración — {{ magnitud.nombre }}{% endblock %}
+{% block page_title %}Nuevo período de calibración{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/magnitudes/equipo/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">Magnitudes</a> /
+  {{ magnitud.nombre }} / Nuevo período
+{% endblock %}
+
+{% block content %}
+
+{# ── CONTEXTO DEL EQUIPO ────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      {% set ultima = calibraciones[0] if calibraciones else none %}
+      {% for lbl,val in [
+        ('Magnitud', magnitud.nombre),
+        ('Última calibración', ultima.fecha_calibracion.strftime('%d/%m/%Y') if ultima else '—'),
+        ('Laboratorio', ultima.laboratorio if ultima else '—'),
+        ('Período actual', (intervalo_actual|string ~ ' meses') if intervalo_actual else 'No definido'),
+      ] %}
+      <div style="text-align:center;padding:10px;background:var(--bg-inset);border-radius:8px;">
+        <div style="font-size:10px;color:var(--text-muted);">{{ lbl }}</div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary-dark);">{{ val }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if ultima and ultima.puntos %}
+    {# Resumen de conformidad de la última calibración #}
+    {% set ok   = ultima.puntos | selectattr('dentro_tolerancia', 'equalto', true)  | list | length %}
+    {% set fail = ultima.puntos | selectattr('dentro_tolerancia', 'equalto', false) | list | length %}
+    {% set total = ultima.puntos | length %}
+    <div style="margin-top:12px;padding:10px 14px;border-radius:8px;
+                background:{% if fail==0 %}var(--sem-ok-bg){% else %}var(--sem-fail-bg){% endif %};
+                font-size:13px;color:{% if fail==0 %}var(--success){% else %}var(--danger){% endif %};">
+      <i class="fas {% if fail==0 %}fa-circle-check{% else %}fa-circle-xmark{% endif %}"></i>
+      Última calibración: <strong>{{ ok }}/{{ total }} puntos conformes</strong>
+      {% if fail > 0 %} — {{ fail }} punto(s) fuera de tolerancia{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── OPCIONES DE PERÍODO ────────────────────────────────────────────────── #}
+<div style="font-size:14px;font-weight:700;color:var(--primary-dark);margin-bottom:16px;">
+  ¿Con qué frecuencia se va a calibrar este equipo?
+</div>
+
+<div style="display:grid;gap:16px;max-width:800px;">
+
+  {# OPCIÓN 1 — Mantener 12 meses (RECOMENDADA) #}
+  <div class="card" style="border:2px solid var(--primary);position:relative;">
+    <div style="position:absolute;top:-11px;left:20px;background:var(--primary);
+                color:white;font-size:11px;font-weight:700;padding:2px 12px;border-radius:10px;">
+      ✓ RECOMENDADO
+    </div>
+    <div class="card-body" style="padding:20px 24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:var(--primary-dark);margin-bottom:4px;">
+            <i class="fas fa-calendar-check" style="color:var(--primary);margin-right:8px;"></i>
+            Calibrar cada 12 meses
+          </div>
+          <div style="font-size:13px;color:var(--text-muted);">
+            Período estándar reconocido por auditores ISO 9001 en Colombia.
+            Aplica para la mayoría de equipos de uso general.
+          </div>
+        </div>
+        <form method="post" action="/ilac/periodo/{{ magnitud.id }}/guardar">
+          <input type="hidden" name="intervalo" value="12">
+          <input type="hidden" name="metodo" value="estandar">
+          <input type="hidden" name="justificacion" value="Período estándar de 12 meses">
+          <button type="submit" class="btn btn-primary" style="white-space:nowrap;">
+            <i class="fas fa-check"></i> Aplicar 12 meses
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {# OPCIÓN 2 — Ajustar período (6 a 18 meses) #}
+  <div class="card" style="border:1.5px solid var(--border);">
+    <div class="card-body" style="padding:20px 24px;">
+      <div style="font-size:15px;font-weight:700;color:var(--primary-dark);margin-bottom:4px;">
+        <i class="fas fa-sliders" style="color:var(--accent);margin-right:8px;"></i>
+        Ajustar el período
+      </div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+        Si tienes una razón técnica o contractual para calibrar con diferente frecuencia.
+        Requiere justificación escrita. Máximo 18 meses.
+      </div>
+      <form method="post" action="/ilac/periodo/{{ magnitud.id }}/guardar" id="form-ajuste">
+        <input type="hidden" name="metodo" value="ajuste_manual">
+        <div style="margin-bottom:16px;">
+          <label style="font-size:12px;font-weight:700;color:var(--text);display:block;margin-bottom:8px;">
+            PERÍODO SELECCIONADO: <span id="lbl-meses" style="color:var(--primary);font-size:15px;">12</span> meses
+          </label>
+          <input type="range" name="intervalo" id="slider-meses"
+                 min="6" max="18" step="1" value="{{ intervalo_actual or 12 }}"
+                 style="width:100%;accent-color:var(--primary);"
+                 oninput="document.getElementById('lbl-meses').textContent=this.value">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-top:4px;">
+            <span>6 meses (mínimo)</span>
+            <span>12 meses (estándar)</span>
+            <span>18 meses (máximo)</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            Justificación <span class="req">*</span>
+            <span style="font-size:11px;color:var(--text-muted);font-weight:400;">
+              (queda registrada en el historial)
+            </span>
+          </label>
+          <textarea name="justificacion" class="form-control" rows="3" required
+                    placeholder="Ej: Contrato con cliente exige calibración semestral · El equipo se usa en condiciones críticas · Fabricante recomienda cada 18 meses según manual..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-outline">
+          <i class="fas fa-save"></i> Guardar período ajustado
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {# OPCIÓN 3 — Módulo avanzado (solo si licencia activa) #}
+  {% if modulo_avanzado %}
+  <div class="card" style="border:1.5px solid var(--purple);">
+    <div class="card-body" style="padding:20px 24px;">
+      <div style="font-size:15px;font-weight:700;color:var(--purple);margin-bottom:4px;">
+        <i class="fas fa-flask" style="margin-right:8px;"></i>
+        Análisis técnico avanzado — ILAC-G24
+      </div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+        Calcula el período óptimo usando metodologías técnicas basadas en deriva,
+        horas de uso y verificaciones intermedias. Requiere datos históricos.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="/ilac/riesgo/{{ magnitud.id }}?metodo=m1m2" class="btn btn-outline"
+           style="border-color:var(--purple);color:var(--purple);">
+          <i class="fas fa-chart-line"></i> M1/M2 — Análisis de deriva
+        </a>
+        <a href="/ilac/riesgo/{{ magnitud.id }}?metodo=m3" class="btn btn-outline"
+           style="border-color:var(--purple);color:var(--purple);">
+          <i class="fas fa-clock"></i> M3 — Horas de uso
+        </a>
+        <a href="/ilac/riesgo/{{ magnitud.id }}?metodo=m4" class="btn btn-outline"
+           style="border-color:var(--purple);color:var(--purple);">
+          <i class="fas fa-check-double"></i> M4 — Verificaciones intermedias
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+// Inicializar el label del slider con el valor actual
+const slider = document.getElementById('slider-meses');
+if(slider) {
+  document.getElementById('lbl-meses').textContent = slider.value;
+}
+</script>
+{% endblock %}

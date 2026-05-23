@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Verificaciones — {{ magnitud.nombre }}{% endblock %}
+{% block page_title %}Verificaciones intermedias{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/magnitudes/equipo/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">Magnitudes</a> /
+  {{ magnitud.nombre }} / Verificaciones
+{% endblock %}
+{% block topbar_actions %}
+{% if plan and plan.activo and usuario_actual.rol != 'solo_lectura' %}
+<a href="/verificaciones/nueva/{{ magnitud.id }}" class="btn btn-accent btn-sm">
+  <i class="fas fa-plus"></i> Nueva verificación
+</a>
+{% endif %}
+{% if plan %}
+<a href="/verificaciones/plan/{{ magnitud.id }}/pdf" class="btn btn-outline btn-sm" target="_blank">
+  <i class="fas fa-file-pdf"></i> PDF del plan
+</a>
+{% endif %}
+<a href="/verificaciones/plan/{{ magnitud.id }}" class="btn btn-outline btn-sm">
+  <i class="fas fa-cog"></i> Configurar plan
+</a>
+{% endblock %}
+
+{% block content %}
+
+{% if not plan %}
+{# ── Sin plan configurado ─────────────────────────────────────────── #}
+<div class="card" style="border-left:4px solid var(--warning);">
+  <div class="card-body" style="text-align:center;padding:40px;">
+    <i class="fas fa-triangle-exclamation" style="font-size:40px;color:var(--warning);display:block;margin-bottom:12px;"></i>
+    <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Sin plan de verificaciones configurado</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">ISO/IEC 17025 §6.4.10 requiere que documentes el plan de verificaciones o justifiques por qué no aplica.</div>
+    <a href="/verificaciones/plan/{{ magnitud.id }}" class="btn btn-primary">
+      <i class="fas fa-cog"></i> Configurar plan ahora
+    </a>
+  </div>
+</div>
+
+{% elif not plan.activo %}
+{# ── Verificaciones no aplican ────────────────────────────────────── #}
+<div class="card" style="border-left:4px solid var(--warning);">
+  <div class="card-header">
+    <span class="card-title">
+      <i class="fas fa-ban" style="color:var(--warning);margin-right:8px;"></i>
+      No se realizan verificaciones intermedias
+    </span>
+    <a href="/verificaciones/plan/{{ magnitud.id }}" class="btn btn-outline btn-sm">
+      <i class="fas fa-pen"></i> Modificar decisión
+    </a>
+  </div>
+  <div class="card-body">
+    <div class="infobox infobox-amber" style="margin-bottom:20px;">
+      <i class="fas fa-triangle-exclamation"></i>
+      <strong>Decisión documentada conforme ISO/IEC 17025 §6.4.10.</strong>
+      Las verificaciones intermedias no se realizan para esta magnitud. El motivo queda registrado a continuación.
+    </div>
+
+    <div style="padding:20px;background:var(--bg-inset);border-radius:10px;border:1px solid var(--border);margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">
+        <i class="fas fa-quote-left" style="margin-right:4px;opacity:0.5;"></i> Justificación registrada
+      </div>
+      <div style="font-size:14px;color:var(--text);line-height:1.7;">
+        {{ plan.justificacion_no_aplica or 'Sin justificación registrada.' }}
+      </div>
+    </div>
+
+    {% if plan.aprobado_por_nombre or plan.fecha_aprobacion %}
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      {% if plan.aprobado_por_nombre %}
+      <div style="padding:12px 16px;background:var(--bg-inset);border-radius:8px;min-width:180px;">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Aprobado por</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text);">{{ plan.aprobado_por_nombre }}</div>
+        {% if plan.aprobado_por_cargo %}
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">{{ plan.aprobado_por_cargo }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% if plan.fecha_aprobacion %}
+      <div style="padding:12px 16px;background:var(--bg-inset);border-radius:8px;min-width:150px;">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Fecha de aprobación</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text);">{{ plan.fecha_aprobacion.strftime('%d/%m/%Y') }}</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% else %}
+{# ── Plan activo — mostrar info y historial ───────────────────────── #}
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+      {% for label, val in [
+        ('Frecuencia', 'Cada ' ~ plan.frecuencia_meses ~ ' meses'),
+        ('Patrón de referencia', plan.patron_referencia or '—'),
+        ('Umbral alerta', plan.umbral_alerta_pct|string ~ '% del EMP'),
+        ('Umbral fuera', plan.umbral_fuera_pct|string ~ '% del EMP'),
+      ] %}
+      <div style="text-align:center;padding:12px;background:var(--bg-inset);border-radius:8px;">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">{{ label }}</div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary-dark);">{{ val }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if plan.aprobado_por_nombre or plan.fecha_aprobacion %}
+    <div style="margin-top:12px;padding:10px 14px;background:var(--bg-inset);border-radius:8px;display:flex;gap:20px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text-muted);">
+      <i class="fas fa-user-check" style="color:var(--success);"></i>
+      <span>Plan aprobado por:
+        <strong style="color:var(--text);">{{ plan.aprobado_por_nombre or '—' }}</strong>
+        {% if plan.aprobado_por_cargo %} · {{ plan.aprobado_por_cargo }}{% endif %}
+        {% if plan.fecha_aprobacion %} · {{ plan.fecha_aprobacion.strftime('%d/%m/%Y') }}{% endif %}
+      </span>
+    </div>
+    {% endif %}
+
+    {% if proxima %}
+    <div style="margin-top:12px;padding:10px 16px;border-radius:8px;background:{% if dias is not none and dias < 0 %}var(--sem-fail-bg){% elif dias is not none and dias <= 30 %}var(--info-amber-bg){% else %}var(--sem-ok-bg){% endif %};">
+      <span style="font-size:13px;color:var(--text-muted);">Próxima verificación programada:</span>
+      <strong style="margin-left:8px;color:{% if dias is not none and dias < 0 %}var(--danger){% elif dias is not none and dias <= 30 %}var(--warning){% else %}var(--success){% endif %};">
+        {{ proxima.strftime('%d/%m/%Y') }}
+        ({% if dias is not none %}{% if dias < 0 %}vencida hace {{ dias|abs }} días{% elif dias == 0 %}hoy{% else %}en {{ dias }} días{% endif %}{% endif %})
+      </strong>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="fas fa-history" style="color:var(--primary);margin-right:8px;"></i>Historial de verificaciones ({{ verificaciones|length }})</span>
+  </div>
+  {% if verificaciones %}
+  <div style="overflow-x:auto;">
+    <table class="table" style="font-size:13px;">
+      <thead>
+        <tr><th>Fecha</th><th>Tipo</th><th>Realizada por</th><th>Patrón usado</th><th>Puntos</th><th>Resultado</th><th>Desviación máx.</th><th>Acción tomada</th><th>PDF</th></tr>
+      </thead>
+      <tbody>
+        {% for v in verificaciones %}
+        {% set res_color = {'aprobado':'success','alerta':'warning','reprobado':'danger','pendiente':'secondary'} %}
+        <tr>
+          <td style="font-weight:600;">{{ v.fecha.strftime('%d/%m/%Y') }}</td>
+          <td><span class="badge badge-info" style="font-size:10px;">{{ v.tipo.replace('_',' ').title() }}</span></td>
+          <td>{{ v.realizada_por or '—' }}</td>
+          <td>{{ v.patron_usado or '—' }}</td>
+          <td style="text-align:center;">
+            <a href="/verificaciones/{{ v.id }}/puntos" class="btn btn-outline btn-sm" style="padding:2px 8px;">
+              {{ v.puntos|length }} pts
+            </a>
+          </td>
+          <td>
+            <span class="badge badge-{{ res_color.get(v.resultado,'secondary') }}" style="font-size:11px;">
+              {{ v.resultado.upper() if v.resultado else '—' }}
+            </span>
+          </td>
+          <td style="font-weight:{% if v.max_desviacion_pct and v.max_desviacion_pct >= plan.umbral_fuera_pct %}700{% else %}400{% endif %};
+                     color:{% if v.max_desviacion_pct and v.max_desviacion_pct >= plan.umbral_fuera_pct %}var(--danger){% elif v.max_desviacion_pct and v.max_desviacion_pct >= plan.umbral_alerta_pct %}var(--warning){% else %}var(--text){% endif %};">
+            {{ '%.1f%%'|format(v.max_desviacion_pct) if v.max_desviacion_pct is not none else '—' }}
+          </td>
+          <td style="font-size:12px;">{{ v.accion_tomada.replace('_',' ').title() if v.accion_tomada else '—' }}</td>
+          <td>
+            <a href="/verificaciones/{{ v.id }}/pdf" target="_blank" class="btn btn-outline btn-sm" style="padding:3px 8px;">
+              <i class="fas fa-file-pdf"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body" style="text-align:center;padding:40px;color:var(--text-muted);">
+    <i class="fas fa-check-double" style="font-size:40px;opacity:0.3;display:block;margin-bottom:12px;"></i>
+    Sin verificaciones registradas aún.
+    <a href="/verificaciones/nueva/{{ magnitud.id }}" style="display:block;margin-top:12px;" class="btn btn-accent">Registrar primera verificación</a>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

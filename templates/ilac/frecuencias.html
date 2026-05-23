@@ -1,0 +1,527 @@
+{% extends "base.html" %}
+{% block title %}Frecuencias de Calibración — {{ magnitud.nombre }}{% endblock %}
+{% block page_title %}Frecuencias de calibración{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/magnitudes/equipo/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">Magnitudes</a> /
+  <a href="/calibraciones/magnitud/{{ magnitud.id }}" style="color:var(--primary);text-decoration:none;">{{ magnitud.nombre }}</a> /
+  Frecuencias de calibración
+{% endblock %}
+{% block topbar_actions %}
+{% if usuario_actual.rol != 'solo_lectura' %}
+<a href="/ilac/riesgo/{{ magnitud.id }}" class="btn btn-outline btn-sm">
+  <i class="fas fa-shield-halved"></i> Editar análisis inicial
+</a>
+{% if registros|length >= 2 %}
+<a href="/ilac/periodo/{{ magnitud.id }}" class="btn btn-accent btn-sm">
+  <i class="fas fa-arrows-rotate"></i> Actualizar período
+</a>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+.factor-table tr:last-child td { border-bottom: none; }
+.factor-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-light); vertical-align: middle; font-size: 13px; }
+.factor-label { color: var(--text-muted); font-size: 11px; font-weight: 700; width: 32px; text-align: center; }
+.score-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 6px;
+  font-weight: 800; font-size: 14px;
+}
+.score-1 { background: rgba(239,68,68,0.15);  color: var(--danger); }
+.score-2 { background: rgba(245,158,11,0.20);  color: var(--warning); }
+.score-3 { background: var(--bg-inset); color: var(--text); border: 1px solid var(--border); }
+.score-4 { background: rgba(34,197,94,0.12);   color: var(--success); }
+.score-5 { background: rgba(34,197,94,0.22);   color: var(--success); }
+.risk-label-1 { color: var(--danger); }
+.risk-label-2 { color: var(--warning); }
+.risk-label-3 { color: var(--text-muted); }
+.risk-label-4, .risk-label-5 { color: var(--success); }
+.timeline-line { width: 2px; background: var(--border); flex: 1; margin-top: 4px; }
+.timeline-circle {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 800; font-size: 14px; flex-shrink: 0; z-index: 1;
+}
+.cal-pts-table td, .cal-pts-table th { padding: 7px 10px; font-size: 12px; }
+.cal-pts-table th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; }
+.toggle-pts { cursor: pointer; user-select: none; }
+.decision-card {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--bg-inset);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Encabezado de la magnitud ──────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      {% for lbl, val in [
+        ('Magnitud', magnitud.nombre),
+        ('Unidad / EMP', (magnitud.unidad or '—') ~ ' · ' ~ (magnitud.emp_texto or '—')),
+        ('Calibraciones registradas', registros|length),
+        ('Período vigente', (ci.intervalo_actual_meses|string ~ ' meses') if ci else 'Sin definir'),
+      ] %}
+      <div style="text-align:center;padding:10px;background:var(--bg-inset);border-radius:8px;">
+        <div style="font-size:10px;color:var(--text-muted);">{{ lbl }}</div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary-dark);">{{ val }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{# ── Línea de tiempo ────────────────────────────────────────────────────── #}
+<div style="display:flex;flex-direction:column;gap:20px;">
+
+  {# ══ REGISTRO 0: Análisis inicial §5.1 ══════════════════════════════════ #}
+  <div style="display:flex;gap:0;align-items:stretch;">
+    <div style="display:flex;flex-direction:column;align-items:center;width:50px;flex-shrink:0;">
+      <div class="timeline-circle" style="background:var(--primary);">
+        <i class="fas fa-shield-halved" style="font-size:15px;"></i>
+      </div>
+      {% if registros %}<div class="timeline-line"></div>{% endif %}
+    </div>
+
+    <div class="card" style="flex:1;margin-left:14px;border-left:4px solid var(--primary);">
+      <div class="card-header">
+        <div>
+          <span class="card-title">
+            <i class="fas fa-shield-halved" style="color:var(--primary);margin-right:8px;"></i>
+            Análisis inicial de riesgo — §5.1
+          </span>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">
+            Realizado <strong>una sola vez</strong> con la primera calibración · Define el intervalo inicial de recalibración
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+          {% if ev and ev.fecha_evaluacion %}
+          <span class="badge badge-info">{{ ev.fecha_evaluacion.strftime('%d/%m/%Y') }}</span>
+          {% endif %}
+          {% if usuario_actual.rol != 'solo_lectura' %}
+          <a href="/ilac/riesgo/{{ magnitud.id }}" class="btn btn-outline btn-sm">
+            <i class="fas fa-pen"></i> Editar
+          </a>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if ev %}
+      <div class="card-body">
+
+        {# Resumen de puntaje e intervalos #}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+          <div style="padding:14px;background:var(--bg-inset);border-radius:8px;text-align:center;">
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Puntuación promedio</div>
+            <div style="font-size:28px;font-weight:800;
+                        color:{% if ev.puntuacion_total < 2 %}var(--danger){% elif ev.puntuacion_total < 3 %}var(--warning){% else %}var(--success){% endif %};">
+              {{ ev.puntuacion_total }}/5.0
+            </div>
+            <div style="font-size:12px;margin-top:4px;
+                        color:{% if ev.puntuacion_total < 2 %}var(--danger){% elif ev.puntuacion_total < 3 %}var(--warning){% else %}var(--success){% endif %};">
+              Riesgo {% if ev.puntuacion_total < 1.5 %}Muy alto{% elif ev.puntuacion_total < 2.5 %}Alto{% elif ev.puntuacion_total < 3.5 %}Medio{% elif ev.puntuacion_total < 4.5 %}Bajo{% else %}Muy bajo{% endif %}
+            </div>
+            <div class="progress-track" style="margin-top:8px;">
+              <div class="progress-fill" style="width:{{ (ev.puntuacion_total/5*100)|int }}%;
+                  background:{% if ev.puntuacion_total<2 %}var(--danger){% elif ev.puntuacion_total<3 %}var(--warning){% else %}var(--success){% endif %};"></div>
+            </div>
+          </div>
+          <div style="padding:14px;background:var(--bg-inset);border-radius:8px;text-align:center;">
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Intervalo sugerido</div>
+            <div style="font-size:28px;font-weight:800;color:var(--text-strong);">{{ ev.intervalo_sugerido_meses }}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">meses</div>
+            {% if ev.intervalo_fabricante_meses %}
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">
+              <i class="fas fa-industry"></i> Fabricante: {{ ev.intervalo_fabricante_meses }}m
+            </div>
+            {% endif %}
+          </div>
+          <div style="padding:14px;background:var(--primary);border-radius:8px;text-align:center;">
+            <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Intervalo adoptado</div>
+            <div style="font-size:28px;font-weight:800;color:white;">{{ ev.intervalo_adoptado_meses }}</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:4px;">meses</div>
+          </div>
+        </div>
+
+        {# 14 factores con nombre completo #}
+        <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;">
+          14 Factores de riesgo evaluados
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px;margin-bottom:16px;">
+          <table class="factor-table" style="width:100%;border-collapse:collapse;">
+            {% for campo, ref, titulo in campos_f_labels[:7] %}
+            {% set val = ev[campo] %}
+            <tr>
+              <td class="factor-label">{{ ref }}</td>
+              <td style="color:var(--text);font-size:13px;padding:7px 10px;border-bottom:1px solid var(--border-light);">{{ titulo }}</td>
+              <td style="padding:7px 10px;border-bottom:1px solid var(--border-light);text-align:right;">
+                <span class="score-pill score-{{ val }}">{{ val }}</span>
+                <span style="font-size:10px;margin-left:6px;" class="risk-label-{{ val }}">
+                  {{ ['','Muy alto','Alto','Medio','Bajo','Muy bajo'][val] }}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </table>
+          <table class="factor-table" style="width:100%;border-collapse:collapse;">
+            {% for campo, ref, titulo in campos_f_labels[7:] %}
+            {% set val = ev[campo] %}
+            <tr>
+              <td class="factor-label">{{ ref }}</td>
+              <td style="color:var(--text);font-size:13px;padding:7px 10px;border-bottom:1px solid var(--border-light);">{{ titulo }}</td>
+              <td style="padding:7px 10px;border-bottom:1px solid var(--border-light);text-align:right;">
+                <span class="score-pill score-{{ val }}">{{ val }}</span>
+                <span style="font-size:10px;margin-left:6px;" class="risk-label-{{ val }}">
+                  {{ ['','Muy alto','Alto','Medio','Bajo','Muy bajo'][val] }}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </table>
+        </div>
+
+        {# Justificación y evaluador #}
+        {% if ev.justificacion %}
+        <div class="infobox infobox-blue" style="margin-bottom:10px;">
+          <i class="fas fa-quote-left" style="opacity:0.5;margin-right:6px;"></i>
+          <strong>Justificación:</strong> {{ ev.justificacion }}
+        </div>
+        {% endif %}
+        {% if ev.justificacion_exceso %}
+        <div class="infobox infobox-amber" style="margin-bottom:10px;">
+          <i class="fas fa-triangle-exclamation"></i>
+          <strong>Justificación (intervalo mayor al sugerido):</strong> {{ ev.justificacion_exceso }}
+        </div>
+        {% endif %}
+        {% if ev.evaluado_por %}
+        <div style="font-size:12px;color:var(--text-muted);">
+          <i class="fas fa-user" style="margin-right:4px;"></i>
+          Evaluado por: <strong style="color:var(--text);">{{ ev.evaluado_por }}</strong>
+          {% if ev.fecha_evaluacion %} · {{ ev.fecha_evaluacion.strftime('%d/%m/%Y') }}{% endif %}
+        </div>
+        {% endif %}
+
+      </div>
+      {% else %}
+      <div class="card-body" style="text-align:center;padding:40px;color:var(--text-muted);">
+        <i class="fas fa-shield-halved" style="font-size:40px;opacity:0.3;display:block;margin-bottom:12px;"></i>
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Sin análisis inicial registrado</div>
+        <div style="font-size:13px;margin-bottom:20px;line-height:1.7;">
+          El análisis inicial §5.1 se realiza <strong>una sola vez</strong> con la primera calibración
+          para definir el intervalo de recalibración mediante 14 factores de riesgo.
+        </div>
+        {% if usuario_actual.rol != 'solo_lectura' %}
+        <a href="/ilac/riesgo/{{ magnitud.id }}" class="btn btn-primary">
+          <i class="fas fa-plus"></i> Realizar análisis inicial
+        </a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ══ REGISTROS POR CALIBRACIÓN ══════════════════════════════════════════ #}
+  {% for r in registros %}
+  {% set c = r.cal %}
+  {% set rc = {'aprobado':'success','no_aprobado':'danger','pendiente':'warning'}.get(c.resultado,'secondary') %}
+  {% set border_color = {'aprobado':'var(--success)','no_aprobado':'var(--danger)','pendiente':'var(--warning)'}.get(c.resultado,'var(--border)') %}
+  {% set circle_bg   = {'aprobado':'var(--success)','no_aprobado':'var(--danger)','pendiente':'var(--warning)'}.get(c.resultado,'var(--text-muted)') %}
+
+  <div style="display:flex;gap:0;align-items:stretch;">
+    <div style="display:flex;flex-direction:column;align-items:center;width:50px;flex-shrink:0;">
+      <div class="timeline-circle" style="background:{{ circle_bg }};">{{ r.num }}</div>
+      {% if not r.es_ultima %}<div class="timeline-line"></div>{% endif %}
+    </div>
+
+    <div class="card" style="flex:1;margin-left:14px;border-left:4px solid {{ border_color }};">
+
+      {# Encabezado del certificado #}
+      <div class="card-header">
+        <div>
+          <span class="card-title">
+            Calibración {{ r.num }}
+            {% if r.es_primera %}
+            <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px;">(primera calibración)</span>
+            {% endif %}
+          </span>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">
+            <i class="fas fa-calendar" style="margin-right:4px;"></i>{{ c.fecha_calibracion.strftime('%d/%m/%Y') }}
+            {% if c.laboratorio %} &nbsp;·&nbsp; <i class="fas fa-flask"></i> {{ c.laboratorio }}{% endif %}
+            {% if c.acreditacion_laboratorio %} <span style="color:var(--primary-light);">({{ c.acreditacion_laboratorio }})</span>{% endif %}
+            {% if c.numero_certificado %} &nbsp;·&nbsp; Cert. <strong style="color:var(--text);">{{ c.numero_certificado }}</strong>{% endif %}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+          <span class="badge badge-{{ rc }}">{{ c.resultado.replace('_',' ').title() if c.resultado else 'Pendiente' }}</span>
+          <a href="/analisis/{{ c.id }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-chart-line"></i> Ver análisis completo
+          </a>
+        </div>
+      </div>
+
+      <div class="card-body">
+
+        {# Resumen del período #}
+        <div style="display:grid;grid-template-columns:1fr 1fr{% if r.puntos_total > 0 %} 1fr{% endif %};gap:12px;margin-bottom:16px;">
+
+          <div style="padding:12px;background:var(--bg-inset);border-radius:8px;">
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
+              {% if r.es_primera %}Intervalo inicial{% else %}Intervalo de calibración{% endif %}
+            </div>
+            {% if r.intervalo_meses %}
+            <div style="font-size:22px;font-weight:800;color:var(--primary);">
+              {{ r.intervalo_meses }}<span style="font-size:12px;font-weight:400;color:var(--text-muted);margin-left:4px;">meses</span>
+            </div>
+            {% if r.cambio_intervalo %}
+            <div style="font-size:11px;margin-top:6px;padding:4px 8px;background:var(--info-amber-bg);border-radius:4px;color:var(--info-amber-text);">
+              <i class="fas fa-arrow-right-arrow-left"></i> Cambió de {{ r.intervalo_anterior }}m → {{ r.intervalo_meses }}m
+            </div>
+            {% elif not r.es_primera and r.intervalo_anterior %}
+            <div style="font-size:11px;margin-top:6px;color:var(--text-muted);">
+              <i class="fas fa-equals"></i> Igual al período anterior
+            </div>
+            {% endif %}
+            {% else %}
+            <div style="font-size:13px;color:var(--text-muted);">Sin programar</div>
+            {% endif %}
+          </div>
+
+          <div style="padding:12px;background:var(--bg-inset);border-radius:8px;">
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Próxima calibración</div>
+            {% if c.proxima_calibracion %}
+            {% set dias = (c.proxima_calibracion - hoy).days %}
+            <div style="font-size:16px;font-weight:700;
+                        color:{% if dias < 0 %}var(--danger){% elif dias <= 30 %}var(--warning){% else %}var(--text-strong){% endif %};">
+              {{ c.proxima_calibracion.strftime('%d/%m/%Y') }}
+            </div>
+            <div style="font-size:11px;margin-top:4px;
+                        color:{% if dias < 0 %}var(--danger){% elif dias <= 30 %}var(--warning){% else %}var(--text-muted){% endif %};">
+              {% if dias < 0 %}<i class="fas fa-triangle-exclamation"></i> Vencida hace {{ dias|abs }}d
+              {% elif dias == 0 %}¡Hoy!
+              {% else %}<i class="fas fa-clock"></i> En {{ dias }} días{% endif %}
+            </div>
+            {% else %}
+            <div style="font-size:13px;color:var(--text-muted);">Sin definir</div>
+            {% endif %}
+          </div>
+
+          {% if r.puntos_total > 0 %}
+          <div style="padding:12px;background:{% if r.puntos_fail == 0 %}var(--sem-ok-bg){% else %}var(--sem-fail-bg){% endif %};border-radius:8px;">
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Conformidad de puntos</div>
+            <div style="font-size:22px;font-weight:800;color:{% if r.puntos_fail == 0 %}var(--success){% else %}var(--danger){% endif %};">
+              {{ r.puntos_ok }}/{{ r.puntos_total }}
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+              {% if r.puntos_fail == 0 %}Todos dentro de tolerancia
+              {% else %}{{ r.puntos_fail }} punto(s) fuera{% endif %}
+            </div>
+          </div>
+          {% endif %}
+        </div>
+
+        {# Condiciones ambientales #}
+        {% if c.temperatura_ambiente or c.humedad_relativa or c.metodo_calibracion %}
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin-bottom:14px;padding:8px 12px;background:var(--bg-inset);border-radius:6px;">
+          {% if c.temperatura_ambiente %}<span><i class="fas fa-thermometer-half"></i> {{ c.temperatura_ambiente }}°C</span>{% endif %}
+          {% if c.humedad_relativa %}<span><i class="fas fa-droplet"></i> {{ c.humedad_relativa }}%HR</span>{% endif %}
+          {% if c.metodo_calibracion %}<span><i class="fas fa-book"></i> {{ c.metodo_calibracion }}</span>{% endif %}
+          {% if c.patrones_utilizados %}<span><i class="fas fa-ruler"></i> {{ c.patrones_utilizados }}</span>{% endif %}
+        </div>
+        {% endif %}
+
+        {# Tabla de puntos de calibración #}
+        {% if c.puntos %}
+        <div>
+          <div class="toggle-pts" onclick="togglePts({{ c.id }})" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-inset);border-radius:6px;margin-bottom:2px;border:1px solid var(--border);">
+            <span style="font-size:12px;font-weight:700;color:var(--text);">
+              <i class="fas fa-table" style="margin-right:6px;color:var(--primary);"></i>
+              Puntos de calibración ({{ c.puntos|length }})
+            </span>
+            <span id="icon-{{ c.id }}" style="color:var(--text-muted);font-size:12px;">
+              <i class="fas fa-chevron-down"></i> Ver detalle
+            </span>
+          </div>
+          <div id="pts-{{ c.id }}" style="display:none;overflow-x:auto;border:1px solid var(--border);border-top:none;border-radius:0 0 6px 6px;">
+            <table class="cal-pts-table" style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th style="background:var(--bg-inset);color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border);text-align:center;">#</th>
+                  <th style="background:var(--bg-inset);color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border);">Patrón</th>
+                  <th style="background:var(--bg-inset);color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border);">Indicado</th>
+                  <th style="background:var(--bg-inset);color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border);">Error</th>
+                  {% if c.usar_incertidumbre %}<th style="background:var(--bg-inset);color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border);">U (k=2)</th>{% endif %}
+                  <th style="background:var(--bg-inset);color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border);">EMP</th>
+                  <th style="background:var(--bg-inset);color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border);text-align:center;">Resultado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for p in c.puntos %}
+                <tr style="background:{% if p.dentro_tolerancia == false %}var(--sem-fail-bg){% else %}transparent{% endif %};">
+                  <td style="text-align:center;font-weight:600;border-bottom:1px solid var(--border-light);">{{ p.numero_punto }}</td>
+                  <td style="border-bottom:1px solid var(--border-light);">{{ p.valor_patron }}</td>
+                  <td style="border-bottom:1px solid var(--border-light);">{{ p.valor_indicado }}</td>
+                  <td style="font-weight:700;border-bottom:1px solid var(--border-light);
+                             color:{% if p.dentro_tolerancia == false %}var(--danger){% else %}var(--text){% endif %};">
+                    {{ '%+.4g'|format(p.error) if p.error is not none else '—' }}
+                  </td>
+                  {% if c.usar_incertidumbre %}
+                  <td style="border-bottom:1px solid var(--border-light);color:var(--text-muted);">
+                    {{ '%.4g'|format(p.incertidumbre) if p.incertidumbre is not none else '—' }}
+                  </td>
+                  {% endif %}
+                  <td style="border-bottom:1px solid var(--border-light);color:var(--text-muted);">
+                    ±{{ p.emp_punto if p.emp_punto is not none else (magnitud.emp_valor or '—') }}
+                  </td>
+                  <td style="text-align:center;border-bottom:1px solid var(--border-light);">
+                    {% if p.dentro_tolerancia == true %}
+                    <span style="color:var(--success);font-weight:700;font-size:12px;">✓ Conforme</span>
+                    {% elif p.dentro_tolerancia == false %}
+                    <span style="color:var(--danger);font-weight:700;font-size:12px;">✗ No conforme</span>
+                    {% else %}
+                    <span style="color:var(--text-muted);font-size:12px;">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        {# ── Decisión de período ─────────────────────────────────────────── #}
+        {% if r.es_primera %}
+        {# Primera calibración: el período viene del análisis inicial #}
+        <div class="infobox infobox-blue" style="margin-top:14px;margin-bottom:0;">
+          <i class="fas fa-info-circle"></i>
+          <strong>Primera calibración:</strong>
+          {% if ev %}
+            El intervalo de <strong>{{ r.intervalo_meses or ev.intervalo_adoptado_meses }} meses</strong>
+            fue definido mediante el análisis inicial §5.1
+            (puntuación {{ ev.puntuacion_total }}/5.0, riesgo
+            {% if ev.puntuacion_total < 2 %}alto{% elif ev.puntuacion_total < 3 %}medio-alto{% elif ev.puntuacion_total < 3.5 %}medio{% else %}bajo{% endif %}).
+          {% else %}
+            <a href="/ilac/riesgo/{{ magnitud.id }}" style="color:var(--primary-light);">
+              Realizar análisis inicial §5.1 →
+            </a>
+          {% endif %}
+        </div>
+        {% else %}
+        {# Segunda calibración en adelante: mostrar decisión de período #}
+        <div class="decision-card" style="margin-top:14px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;">
+            <i class="fas fa-calendar-check" style="margin-right:5px;color:var(--primary);"></i>
+            Decisión de período — tras evaluar este certificado
+          </div>
+          {% if c.metodo_periodo %}
+          <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:180px;">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:3px;">Método aplicado</div>
+              {% if c.metodo_periodo == 'estandar' %}
+              <div style="font-size:13px;font-weight:700;color:var(--primary);">
+                <i class="fas fa-calendar-check" style="margin-right:5px;"></i>Período estándar (12 meses)
+              </div>
+              {% elif c.metodo_periodo == 'ajuste_manual' %}
+              <div style="font-size:13px;font-weight:700;color:var(--accent);">
+                <i class="fas fa-sliders" style="margin-right:5px;"></i>Ajuste manual — {{ r.intervalo_meses }} meses
+              </div>
+              {% else %}
+              <div style="font-size:13px;font-weight:700;color:var(--purple);">
+                <i class="fas fa-flask" style="margin-right:5px;"></i>Análisis técnico avanzado
+              </div>
+              {% endif %}
+            </div>
+            {% if c.justificacion_periodo %}
+            <div style="flex:2;min-width:220px;">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:3px;">Justificación registrada</div>
+              <div style="font-size:13px;color:var(--text);font-style:italic;">"{{ c.justificacion_periodo }}"</div>
+            </div>
+            {% endif %}
+          </div>
+          {% if r.cambio_intervalo %}
+          <div class="infobox infobox-amber" style="margin-top:10px;margin-bottom:0;">
+            <i class="fas fa-arrows-rotate"></i>
+            <strong>Período revisado:</strong>
+            El intervalo fue actualizado de <strong>{{ r.intervalo_anterior }} meses</strong>
+            a <strong>{{ r.intervalo_meses }} meses</strong> tras evaluar este certificado.
+          </div>
+          {% endif %}
+          {% else %}
+          <div style="font-size:12px;color:var(--text-muted);font-style:italic;">
+            <i class="fas fa-clock-rotate-left" style="margin-right:4px;"></i>
+            Decisión registrada antes de que se habilitara el seguimiento detallado.
+            {% if r.cambio_intervalo %}
+            <span style="display:block;margin-top:6px;padding:6px 10px;background:var(--info-amber-bg);border-radius:4px;color:var(--info-amber-text);font-style:normal;">
+              <i class="fas fa-arrows-rotate"></i>
+              <strong>Período revisado:</strong> cambió de {{ r.intervalo_anterior }}m → {{ r.intervalo_meses }}m.
+            </span>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {# Notas / observaciones #}
+        {% if c.observaciones %}
+        <div style="margin-top:12px;padding:10px 12px;background:var(--bg-inset);border-radius:6px;font-size:12px;color:var(--text-muted);">
+          <i class="fas fa-note-sticky" style="margin-right:4px;"></i> {{ c.observaciones }}
+        </div>
+        {% endif %}
+
+        {# CTA: revisar período — solo en la última calibración #}
+        {% if r.es_ultima and registros|length >= 2 and usuario_actual.rol != 'solo_lectura' %}
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+          <a href="/ilac/periodo/{{ magnitud.id }}" class="btn btn-accent">
+            <i class="fas fa-arrows-rotate"></i> Revisar y actualizar período de calibración
+          </a>
+          <span style="font-size:12px;color:var(--text-muted);margin-left:10px;">
+            Aplica el nuevo intervalo a partir de esta última calibración.
+          </span>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  {# Sin calibraciones #}
+  {% if not registros %}
+  <div style="display:flex;gap:0;">
+    <div style="width:50px;"></div>
+    <div class="card" style="flex:1;margin-left:14px;">
+      <div class="card-body" style="text-align:center;padding:40px;color:var(--text-muted);">
+        <i class="fas fa-certificate" style="font-size:40px;opacity:0.3;display:block;margin-bottom:12px;"></i>
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Sin calibraciones registradas aún</div>
+        <a href="/calibraciones/magnitud/{{ magnitud.id }}/nueva" class="btn btn-accent">
+          <i class="fas fa-plus"></i> Registrar primera calibración
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+{% block scripts %}
+<script>
+function togglePts(id) {
+  const el = document.getElementById('pts-' + id);
+  const ico = document.getElementById('icon-' + id);
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  ico.innerHTML = open
+    ? '<i class="fas fa-chevron-down"></i> Ver detalle'
+    : '<i class="fas fa-chevron-up"></i> Ocultar';
+}
+</script>
+{% endblock %}
+{% endblock %}

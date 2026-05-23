@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+{% block title %}Inventario de equipos{% endblock %}
+{% block page_title %}Inventario de equipos{% endblock %}
+
+{% block topbar_actions %}
+<a href="/equipos/nuevo" class="btn btn-primary btn-sm">
+  <i class="fas fa-plus"></i> Nuevo equipo
+</a>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+  /* ── Tarjeta de equipo ─────────────────────────────────────────────── */
+  .eq-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 0;
+    display: flex; flex-direction: column;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    overflow: hidden;
+    position: relative;
+  }
+  .eq-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+    border-color: var(--primary-light);
+  }
+  .eq-card-accent {
+    height: 4px;
+    width: 100%;
+    flex-shrink: 0;
+  }
+  .eq-card-body { padding: 18px 20px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+
+  .eq-header { display: flex; gap: 14px; align-items: flex-start; }
+  .eq-photo {
+    width: 52px; height: 52px; flex-shrink: 0;
+    border-radius: 10px; border: 1px solid var(--border);
+    object-fit: cover;
+  }
+  .eq-photo-placeholder {
+    width: 52px; height: 52px; flex-shrink: 0;
+    border-radius: 10px; border: 1px solid var(--border);
+    background: var(--bg-inset);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-subtle); font-size: 20px;
+  }
+  .eq-name {
+    font-size: 15px; font-weight: 800;
+    color: var(--text-strong, var(--text));
+    line-height: 1.2; margin-bottom: 3px;
+  }
+  .eq-meta { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+  .eq-stats {
+    background: var(--bg-inset);
+    border-radius: var(--radius-sm);
+    padding: 11px 14px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .eq-stat-label {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .eq-stat-val { font-size: 14px; font-weight: 800; color: var(--text-strong, var(--text)); }
+
+  .eq-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .eq-tag {
+    background: var(--badge-eq-bg, rgba(59,130,246,0.1));
+    color: var(--primary-light, var(--primary));
+    padding: 3px 9px; border-radius: 5px;
+    font-size: 10px; font-weight: 600;
+  }
+
+  /* Chip de días */
+  .dias-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700;
+  }
+  .dias-danger  { background: rgba(239,68,68,0.15);  color: var(--danger); }
+  .dias-warn    { background: rgba(245,158,11,0.15); color: var(--warning); }
+  .dias-ok      { background: rgba(34,197,94,0.12);  color: var(--success); }
+
+  /* Stat bar superior */
+  .stat-bar {
+    display: flex; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; align-items: center;
+  }
+  .stat-pill {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 18px;
+    box-shadow: var(--shadow-sm);
+  }
+  .stat-pill-num { font-size: 24px; font-weight: 900; line-height: 1; letter-spacing: -0.5px; }
+  .stat-pill-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center; padding: 64px 24px; color: var(--text-muted);
+  }
+  .empty-state i { font-size: 48px; opacity: 0.2; display: block; margin-bottom: 16px; }
+  .empty-state h3 { font-size: 18px; font-weight: 700; color: var(--text-strong, var(--text)); margin-bottom: 8px; }
+  .empty-state p  { font-size: 14px; }
+
+  /* ── Filtros ─────────────────────────────────────────────────────────── */
+  .filters-bar {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .search-wrap {
+    position: relative; flex: 1; min-width: 200px; max-width: 340px;
+  }
+  .search-wrap i {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); font-size: 13px; pointer-events: none;
+  }
+  .search-input {
+    width: 100%; padding: 9px 13px 9px 36px;
+    border: 1.5px solid var(--border); border-radius: 20px;
+    font-size: 13px; color: var(--text); background: var(--bg-card);
+    font-family: inherit; transition: all 0.18s;
+  }
+  .search-input:focus {
+    outline: none; border-color: var(--primary-light);
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+  }
+  .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .f-chip {
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    border: 1.5px solid var(--border); color: var(--text-muted);
+    background: var(--bg-card); transition: all 0.15s; user-select: none;
+  }
+  .f-chip:hover { border-color: var(--primary-light); color: var(--text); }
+  .f-chip.active {
+    background: var(--primary); border-color: var(--primary);
+    color: white;
+  }
+  .f-chip.active-danger  { background: var(--danger);  border-color: var(--danger);  color: white; }
+  .f-chip.active-warning { background: var(--warning); border-color: var(--warning); color: #000; }
+  .f-chip.active-success { background: var(--success); border-color: var(--success); color: white; }
+  .no-results {
+    text-align: center; padding: 48px 24px; color: var(--text-muted);
+    display: none;
+  }
+  .no-results i { font-size: 40px; opacity: 0.25; display: block; margin-bottom: 12px; }
+  .no-results p { font-size: 14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Calcular métricas ────────────────────────────────────────────────── #}
+{% set total      = equipos|length %}
+{% set operativos = equipos|selectattr('estado','equalto','operativo')|list|length %}
+{% set venc_list  = [] %}
+{% set prox_list  = [] %}
+{% for eq in equipos %}
+  {% for mag in eq.magnitudes %}{% if mag.activa and mag.calibraciones %}
+    {% set ul = mag.calibraciones|sort(attribute='fecha_calibracion')|last %}
+    {% if ul.proxima_calibracion %}
+      {% if (ul.proxima_calibracion - hoy).days < 0   %}{% set _ = venc_list.append(1) %}
+      {% elif (ul.proxima_calibracion - hoy).days <= 30 %}{% set _ = prox_list.append(1) %}{% endif %}
+    {% endif %}
+  {% endif %}{% endfor %}
+{% endfor %}
+
+{# ── Barra de estadísticas ────────────────────────────────────────────── #}
+<div class="stat-bar">
+  <div class="stat-pill">
+    <div class="stat-pill-num" style="color:var(--primary);">{{ total }}</div>
+    <div class="stat-pill-lbl">Total</div>
+  </div>
+  <div class="stat-pill">
+    <div class="stat-pill-num" style="color:var(--success);">{{ operativos }}</div>
+    <div class="stat-pill-lbl">Operativos</div>
+  </div>
+  {% if venc_list %}
+  <div class="stat-pill" style="border-color:rgba(239,68,68,0.3);">
+    <i class="fas fa-circle-xmark" style="color:var(--danger);font-size:18px;"></i>
+    <div>
+      <div class="stat-pill-num" style="color:var(--danger);">{{ venc_list|length }}</div>
+      <div class="stat-pill-lbl">Cal. vencidas</div>
+    </div>
+  </div>
+  {% endif %}
+  {% if prox_list %}
+  <div class="stat-pill" style="border-color:rgba(245,158,11,0.3);">
+    <i class="fas fa-clock" style="color:var(--warning);font-size:18px;"></i>
+    <div>
+      <div class="stat-pill-num" style="color:var(--warning);">{{ prox_list|length }}</div>
+      <div class="stat-pill-lbl">Próximas ≤30d</div>
+    </div>
+  </div>
+  {% endif %}
+  <div style="margin-left:auto;">
+    <span style="font-size:12px;color:var(--text-muted);">{{ total }} equipo(s) registrado(s)</span>
+  </div>
+</div>
+
+{# ── Filtros ──────────────────────────────────────────────────────────── #}
+{% if equipos %}
+<div class="filters-bar">
+  <div class="search-wrap">
+    <i class="fas fa-magnifying-glass"></i>
+    <input type="text" class="search-input" id="eq-search"
+           placeholder="Buscar por nombre, código o área…" oninput="applyFilters()">
+  </div>
+  <div class="filter-chips" id="filter-chips">
+    <span class="f-chip active" data-filter="all" onclick="setChip(this,'active')">Todos</span>
+    <span class="f-chip" data-filter="operativo" onclick="setChip(this,'active-success')">Operativo</span>
+    <span class="f-chip" data-filter="vencida"   onclick="setChip(this,'active-danger')">Cal. vencida</span>
+    <span class="f-chip" data-filter="proxima"   onclick="setChip(this,'active-warning')">Próxima ≤30d</span>
+    <span class="f-chip" data-filter="sin_cal"   onclick="setChip(this,'active')">Sin calibración</span>
+  </div>
+</div>
+{% endif %}
+
+{# ── Grid de equipos ──────────────────────────────────────────────────── #}
+{% if equipos %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;" id="eq-grid">
+  {% for eq in equipos %}
+
+  {# Calcular próxima calibración #}
+  {% set prox_cal = namespace(fecha=none, dias=none) %}
+  {% for mag in eq.magnitudes %}
+    {% if mag.activa and mag.calibraciones %}
+      {% set ul = mag.calibraciones|sort(attribute='fecha_calibracion')|last %}
+      {% if ul.proxima_calibracion %}
+        {% if prox_cal.fecha is none or ul.proxima_calibracion < prox_cal.fecha %}
+          {% set prox_cal.fecha = ul.proxima_calibracion %}
+          {% set prox_cal.dias  = (ul.proxima_calibracion - hoy).days %}
+        {% endif %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+
+  {# Color de acento según estado #}
+  {% set accent_color = {
+    'operativo':             'var(--success)',
+    'en_espera_calibracion': 'var(--warning)',
+    'en_calibracion':        'var(--info)',
+    'en_mantenimiento':      'var(--warning)',
+    'fuera_de_uso':          'var(--danger)',
+    'dado_de_baja':          'var(--text-subtle)',
+  }.get(eq.estado, 'var(--border)') %}
+
+  {% set ec = {
+    'operativo':             'success',
+    'en_espera_calibracion': 'warning',
+    'en_calibracion':        'info',
+    'en_mantenimiento':      'warning',
+    'fuera_de_uso':          'danger',
+    'dado_de_baja':          'secondary',
+  }.get(eq.estado, 'secondary') %}
+
+  {# Categoría de calibración para el filtro #}
+  {% if prox_cal.fecha %}
+    {% if prox_cal.dias < 0 %}{% set cal_cat = 'vencida' %}
+    {% elif prox_cal.dias <= 30 %}{% set cal_cat = 'proxima' %}
+    {% else %}{% set cal_cat = 'ok' %}{% endif %}
+  {% else %}{% set cal_cat = 'sin_cal' %}{% endif %}
+
+  <div class="eq-card"
+       onclick="window.location='/equipos/{{ eq.id }}'"
+       data-nombre="{{ eq.nombre|lower }}"
+       data-codigo="{{ eq.codigo|lower }}"
+       data-area="{{ (eq.area or '')|lower }}"
+       data-estado="{{ eq.estado }}"
+       data-cal="{{ cal_cat }}">
+    <div class="eq-card-accent" style="background:{{ accent_color }};"></div>
+    <div class="eq-card-body">
+
+      {# Cabecera #}
+      <div class="eq-header">
+        {% if eq.foto_path %}
+          <img src="{{ eq.foto_path }}" class="eq-photo" alt="{{ eq.nombre }}">
+        {% else %}
+          <div class="eq-photo-placeholder">
+            <i class="fas fa-ruler-combined"></i>
+          </div>
+        {% endif %}
+        <div style="flex:1;min-width:0;">
+          <div class="eq-name">{{ eq.nombre }}</div>
+          <div class="eq-meta">
+            <span style="font-weight:600;color:var(--text-muted);">{{ eq.codigo }}</span>
+            {% if eq.marca %} · {{ eq.marca }}{% if eq.modelo %} {{ eq.modelo }}{% endif %}{% endif %}
+            {% if eq.area %}<br><i class="fas fa-building" style="font-size:9px;"></i> {{ eq.area }}{% endif %}
+          </div>
+        </div>
+        <span class="badge badge-{{ ec }}" style="flex-shrink:0;font-size:10px;">
+          {{ eq.estado.replace('_',' ').title() }}
+        </span>
+      </div>
+
+      {# Magnitudes y calibración #}
+      <div class="eq-stats">
+        <div>
+          <div class="eq-stat-label">Magnitudes</div>
+          <div class="eq-stat-val">
+            {{ eq.magnitudes|selectattr('activa')|list|length }}/{{ eq.magnitudes|length }}
+          </div>
+        </div>
+        <div>
+          <div class="eq-stat-label">Próxima cal.</div>
+          {% if prox_cal.fecha %}
+            <span class="dias-chip {% if prox_cal.dias < 0 %}dias-danger{% elif prox_cal.dias <= 30 %}dias-warn{% else %}dias-ok{% endif %}">
+              {% if prox_cal.dias < 0 %}<i class="fas fa-exclamation"></i> Vencida {{ prox_cal.dias|abs }}d
+              {% elif prox_cal.dias == 0 %}¡Hoy!
+              {% elif prox_cal.dias <= 30 %}<i class="fas fa-clock"></i> {{ prox_cal.dias }}d
+              {% else %}{{ prox_cal.fecha.strftime('%d/%m/%y') }}{% endif %}
+            </span>
+          {% else %}
+            <span style="font-size:11px;color:var(--text-muted);">Sin programar</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {# Tags de magnitudes activas #}
+      {% set mags_activas = eq.magnitudes|selectattr('activa')|list %}
+      {% if mags_activas %}
+      <div class="eq-tags">
+        {% for mag in mags_activas[:3] %}
+          <span class="eq-tag">{{ mag.nombre }}</span>
+        {% endfor %}
+        {% if mags_activas|length > 3 %}
+          <span style="color:var(--text-muted);font-size:10px;padding:3px 4px;">+{{ mags_activas|length - 3 }} más</span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="no-results" id="no-results">
+  <i class="fas fa-filter-circle-xmark"></i>
+  <p>No hay equipos que coincidan con los filtros seleccionados.</p>
+</div>
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <i class="fas fa-ruler-combined"></i>
+    <h3>Sin equipos registrados</h3>
+    <p>Agrega tu primer equipo para comenzar el control metrológico.</p>
+    <a href="/equipos/nuevo" class="btn btn-primary" style="margin-top:20px;">
+      <i class="fas fa-plus"></i> Agregar primer equipo
+    </a>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let activeChip = 'all';
+  let activeClass = 'active';
+
+  function setChip(el, cls) {
+    document.querySelectorAll('#filter-chips .f-chip').forEach(c => {
+      c.classList.remove('active','active-danger','active-warning','active-success');
+    });
+    el.classList.add(cls);
+    activeChip  = el.dataset.filter;
+    activeClass = cls;
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const q     = document.getElementById('eq-search').value.toLowerCase().trim();
+    const cards = document.querySelectorAll('#eq-grid .eq-card');
+    let visible = 0;
+
+    cards.forEach(card => {
+      const matchText =
+        !q ||
+        card.dataset.nombre.includes(q) ||
+        card.dataset.codigo.includes(q) ||
+        card.dataset.area.includes(q);
+
+      const matchChip =
+        activeChip === 'all'      ? true :
+        activeChip === 'operativo'? card.dataset.estado === 'operativo' :
+        activeChip === 'vencida'  ? card.dataset.cal    === 'vencida'   :
+        activeChip === 'proxima'  ? card.dataset.cal    === 'proxima'   :
+        activeChip === 'sin_cal'  ? card.dataset.cal    === 'sin_cal'   : true;
+
+      const show = matchText && matchChip;
+      card.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    document.getElementById('no-results').style.display = visible === 0 && cards.length > 0 ? 'block' : 'none';
+  }
+</script>
+{% endblock %}

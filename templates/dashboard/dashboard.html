@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block breadcrumb %}Resumen del estado metrológico · {{ hoy.strftime('%d de %B de %Y') }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/dashboard/pdf" class="btn btn-outline btn-sm"
+   {% if not licencia.activa %}style="opacity:0.4;pointer-events:none;" title="Requiere licencia activa"{% endif %}>
+  <i class="fas fa-file-pdf"></i> PDF
+</a>
+<a href="/dashboard/excel" class="btn btn-outline btn-sm"
+   {% if not licencia.activa %}style="opacity:0.4;pointer-events:none;" title="Requiere licencia activa"{% endif %}>
+  <i class="fas fa-file-excel"></i> Excel
+</a>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+/* ── KPI cards ───────────────────────────────────────────────────────── */
+.db-kpi {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px 16px;
+  box-shadow: var(--shadow-sm);
+  display: flex; flex-direction: column; gap: 6px;
+  position: relative; overflow: hidden;
+}
+.db-kpi-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.db-kpi-label  { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); }
+.db-kpi-value  { font-size: 36px; font-weight: 900; line-height: 1; letter-spacing: -1.5px; }
+.db-kpi-sub    { font-size: 11px; color: var(--text-muted); }
+
+/* ── Banner alarmas ──────────────────────────────────────────────────── */
+.db-alarm {
+  background: rgba(239,68,68,0.08);
+  border: 1.5px solid rgba(239,68,68,0.3);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 18px;
+}
+.db-alarm-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.db-alarm-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: rgba(239,68,68,0.18);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--danger); font-size: 15px; flex-shrink: 0;
+}
+.db-alarm-items { display: flex; flex-direction: column; gap: 5px; }
+.db-alarm-item {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 12px; color: var(--text);
+  padding: 5px 8px; border-radius: 6px;
+  background: rgba(239,68,68,0.06);
+}
+.db-alarm-item.warn {
+  background: rgba(245,158,11,0.07);
+}
+.db-alarm-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Filas de actividades ────────────────────────────────────────────── */
+.act-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--border-light);
+  text-decoration: none; color: inherit;
+  transition: all 0.15s; border-radius: 6px;
+}
+.act-row:last-child { border-bottom: none; }
+.act-row:hover { background: var(--bg-card-hover); padding-left: 8px; padding-right: 8px; margin: 0 -8px; }
+.act-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0;
+}
+.act-info { flex: 1; min-width: 0; }
+.act-name   { font-size: 13px; font-weight: 700; color: var(--text-strong, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.act-meta   { font-size: 10px; color: var(--text-muted); font-weight: 600; margin-top: 1px; }
+.days-chip  { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; white-space: nowrap; flex-shrink: 0; }
+.chip-red   { background: rgba(239,68,68,0.15);  color: var(--danger); }
+.chip-amber { background: rgba(245,158,11,0.18); color: var(--warning); }
+.chip-green { background: rgba(34,197,94,0.12);  color: var(--success); }
+
+/* ── Barras de área ──────────────────────────────────────────────────── */
+.area-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+.area-track { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 10px; }
+.area-fill  { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--primary), var(--info)); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Banner licencia ──────────────────────────────────────────────────── #}
+{% if licencia.vencida %}
+<div class="alert alert-danger" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <i class="fas fa-triangle-exclamation" style="font-size:18px;flex-shrink:0;"></i>
+    <div>
+      <div style="font-weight:700;font-size:14px;">Licencia vencida — modo solo lectura</div>
+      <div style="font-size:12px;opacity:0.8;margin-top:2px;">Contacta a MetroGest para renovar.</div>
+    </div>
+  </div>
+  <a href="mailto:soporte@metrogest.com" class="btn btn-danger btn-sm" style="flex-shrink:0;">
+    <i class="fas fa-headset"></i> Renovar
+  </a>
+</div>
+{% elif licencia.dias is not none and licencia.dias <= 15 %}
+<div class="alert alert-warning" style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+  <i class="fas fa-clock" style="flex-shrink:0;"></i>
+  <div style="font-size:13px;"><strong>Tu licencia vence en {{ licencia.dias }} días</strong> ({{ licencia.vence }}).</div>
+</div>
+{% endif %}
+
+{# ── Banner de alarmas ────────────────────────────────────────────────── #}
+{% if total_alertas > 0 or alertas %}
+<div class="db-alarm">
+  <div class="db-alarm-header">
+    <div class="db-alarm-icon"><i class="fas fa-triangle-exclamation"></i></div>
+    <div>
+      <div style="font-size:14px;font-weight:800;color:var(--danger);">
+        {{ total_alertas + alertas|selectattr('dias','le',7)|selectattr('dias','ge',0)|list|length }} elemento(s) requieren atención
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:1px;">Revisa y actúa sobre los elementos críticos</div>
+    </div>
+    <a href="/auditoria/" class="btn btn-outline btn-sm" style="margin-left:auto;border-color:rgba(239,68,68,0.4);color:var(--danger);">
+      Ver listado completo <i class="fas fa-arrow-right"></i>
+    </a>
+  </div>
+  <div class="db-alarm-items">
+    {% if cal_vencidas > 0 %}
+    <div class="db-alarm-item">
+      <div class="db-alarm-dot" style="background:var(--danger);"></div>
+      <i class="fas fa-certificate" style="color:var(--danger);font-size:11px;"></i>
+      <span><strong>{{ cal_vencidas }} calibración(es) vencida(s)</strong> — requieren calibración inmediata</span>
+    </div>
+    {% endif %}
+    {% if verif_vencidas > 0 %}
+    <div class="db-alarm-item">
+      <div class="db-alarm-dot" style="background:var(--danger);"></div>
+      <i class="fas fa-check-double" style="color:var(--danger);font-size:11px;"></i>
+      <span><strong>{{ verif_vencidas }} verificación(es) vencida(s)</strong> — plan de verificación atrasado</span>
+    </div>
+    {% endif %}
+    {% for act in alertas %}
+      {% if act.dias >= 0 and act.dias <= 7 %}
+      <div class="db-alarm-item warn">
+        <div class="db-alarm-dot" style="background:var(--warning);"></div>
+        <i class="fas {{ act.icono }}" style="color:var(--warning);font-size:11px;"></i>
+        <span>
+          <strong>{{ act.titulo }}</strong>
+          <span style="color:var(--text-muted);font-weight:400;"> · {{ act.codigo }}</span>
+          — {{ {'calibracion':'Calibración','verificacion':'Verificación','mantenimiento':'Mantenimiento'}.get(act.tipo,'') }}
+          en {% if act.dias == 0 %}hoy{% elif act.dias == 1 %}mañana{% else %}{{ act.dias }}d{% endif %}
+        </span>
+        <a href="/equipos/{{ act.equipo_id }}" style="margin-left:auto;font-size:11px;color:var(--primary);">Ver →</a>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── KPIs ─────────────────────────────────────────────────────────────── #}
+{% set pct_color = 'var(--success)' if pct_cal >= 90 else ('var(--warning)' if pct_cal >= 70 else 'var(--danger)') %}
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;">
+
+  <div class="db-kpi">
+    <div class="db-kpi-accent" style="background:var(--primary);"></div>
+    <div class="db-kpi-label">Monitoreados</div>
+    <div class="db-kpi-value" style="color:var(--primary);">{{ monitoreados }}</div>
+    <div class="db-kpi-sub">de {{ total }} equipos</div>
+  </div>
+
+  <div class="db-kpi">
+    <div class="db-kpi-accent" style="background:var(--success);"></div>
+    <div class="db-kpi-label">Operativos</div>
+    <div class="db-kpi-value" style="color:var(--success);">{{ operativos }}</div>
+    <div class="db-kpi-sub">de {{ total }} totales</div>
+  </div>
+
+  <div class="db-kpi">
+    <div class="db-kpi-accent" style="background:{{ pct_color }};"></div>
+    <div class="db-kpi-label">Cal. al día</div>
+    <div class="db-kpi-value" style="color:{{ pct_color }};">{{ pct_cal }}%</div>
+    <div class="db-kpi-sub">cumplimiento</div>
+  </div>
+
+  <div class="db-kpi" {% if total_alertas > 0 %}style="border-color:rgba(239,68,68,0.35);background:rgba(239,68,68,0.04);"{% endif %}>
+    <div class="db-kpi-accent" style="background:{% if total_alertas > 0 %}var(--danger){% else %}var(--border){% endif %};"></div>
+    <div class="db-kpi-label" {% if total_alertas > 0 %}style="color:var(--danger);"{% endif %}>
+      {% if total_alertas > 0 %}<i class="fas fa-circle-xmark" style="margin-right:3px;"></i>{% endif %}Vencidas
+    </div>
+    <div class="db-kpi-value" style="color:{% if total_alertas > 0 %}var(--danger){% else %}var(--text-muted){% endif %};">{{ total_alertas }}</div>
+    <div class="db-kpi-sub">cal. + verif.</div>
+  </div>
+
+  {% set prox_total = cal_30 + verif_proximas %}
+  <div class="db-kpi" {% if prox_total > 0 %}style="border-color:rgba(245,158,11,0.3);"{% endif %}>
+    <div class="db-kpi-accent" style="background:{% if prox_total > 0 %}var(--warning){% else %}var(--border){% endif %};"></div>
+    <div class="db-kpi-label">Próximas ≤30d</div>
+    <div class="db-kpi-value" style="color:{% if prox_total > 0 %}var(--warning){% else %}var(--text-muted){% endif %};">{{ prox_total }}</div>
+    <div class="db-kpi-sub">cal. + verif.</div>
+  </div>
+
+</div>
+
+{# ── Contenido principal ──────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:1fr 265px;gap:18px;align-items:start;">
+
+  {# Próximas actividades #}
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">
+        <i class="fas fa-list-check" style="color:var(--primary-light);margin-right:8px;"></i>
+        Próximas actividades
+      </span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:11px;color:var(--text-muted);">Vencidas + próximos 30 días</span>
+        <a href="/calendario/" class="btn btn-ghost btn-xs">Calendario <i class="fas fa-arrow-right"></i></a>
+      </div>
+    </div>
+    <div class="card-body" style="padding:8px 16px;">
+      {% if proximas_actividades %}
+        {% set ns = namespace(sec_venc=false, sec_prox=false) %}
+        {% for act in proximas_actividades %}
+
+          {# Separadores de sección #}
+          {% if act.vencida and not ns.sec_venc %}
+            {% set ns.sec_venc = true %}
+            <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--danger);padding:6px 0 3px;">
+              <i class="fas fa-circle-xmark"></i> Vencidas
+            </div>
+          {% endif %}
+          {% if not act.vencida and not ns.sec_prox %}
+            {% set ns.sec_prox = true %}
+            {% if ns.sec_venc %}<div style="border-top:1px solid var(--border);margin:8px 0;"></div>{% endif %}
+            <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:3px 0;">
+              <i class="fas fa-clock"></i> Próximas
+            </div>
+          {% endif %}
+
+          {# Colores #}
+          {% if act.vencida %}
+            {% set ic_bg='rgba(239,68,68,0.12)' %}{% set ic_col='var(--danger)' %}
+          {% elif act.tipo == 'calibracion' %}
+            {% set ic_bg='rgba(59,130,246,0.12)' %}{% set ic_col='var(--primary-light)' %}
+          {% elif act.tipo == 'verificacion' %}
+            {% set ic_bg='rgba(34,197,94,0.12)' %}{% set ic_col='var(--success)' %}
+          {% else %}
+            {% set ic_bg='rgba(245,158,11,0.12)' %}{% set ic_col='var(--warning)' %}
+          {% endif %}
+
+          <a href="/equipos/{{ act.equipo_id }}" class="act-row">
+            <div class="act-icon" style="background:{{ ic_bg }};color:{{ ic_col }};">
+              <i class="fas {{ act.icono }}"></i>
+            </div>
+            <div class="act-info">
+              <div class="act-name">{{ act.titulo }}</div>
+              <div class="act-meta">
+                <i class="fas fa-tag" style="font-size:8px;"></i> {{ act.codigo }}
+                &nbsp;·&nbsp; {{ act.detalle }}
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div class="days-chip {% if act.dias < 0 %}chip-red{% elif act.dias <= 7 %}chip-amber{% else %}chip-amber{% endif %}">
+                {% if act.dias < 0 %}<i class="fas fa-exclamation" style="font-size:9px;"></i> {{ act.dias|abs }}d
+                {% elif act.dias == 0 %}Hoy
+                {% elif act.dias == 1 %}Mañana
+                {% else %}{{ act.dias }}d{% endif %}
+              </div>
+              <div style="font-size:9px;color:var(--text-muted);margin-top:3px;">{{ act.fecha.strftime('%d/%m/%y') }}</div>
+            </div>
+          </a>
+        {% endfor %}
+      {% else %}
+        <div style="text-align:center;padding:48px 20px;color:var(--text-muted);">
+          <i class="fas fa-calendar-check" style="font-size:40px;opacity:0.2;display:block;margin-bottom:12px;"></i>
+          <div style="font-size:14px;font-weight:700;color:var(--success);">Todo al día</div>
+          <div style="font-size:12px;margin-top:4px;">Sin actividades pendientes en los próximos 30 días</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Panel derecho #}
+  <div style="display:flex;flex-direction:column;gap:14px;">
+
+    {# Resumen de estado #}
+    <div class="card">
+      <div class="card-body" style="padding:16px 18px;">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);margin-bottom:10px;">
+          <i class="fas fa-gauge" style="color:var(--primary);margin-right:4px;"></i> Estado global
+        </div>
+
+        {# Barra de cumplimiento #}
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;">
+          <span style="color:var(--text-muted);">Calibraciones al día</span>
+          <span style="font-weight:800;color:{{ pct_color }};">{{ pct_cal }}%</span>
+        </div>
+        <div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:14px;">
+          <div style="width:{{ pct_cal }}%;height:100%;border-radius:4px;background:{{ pct_color }};transition:width 0.6s;"></div>
+        </div>
+
+        {# Mini stats 2x2 #}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <div style="background:var(--bg-inset);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:20px;font-weight:900;color:{% if cal_vencidas > 0 %}var(--danger){% else %}var(--text-muted){% endif %};">{{ cal_vencidas }}</div>
+            <div style="font-size:9px;color:var(--text-muted);font-weight:700;margin-top:2px;">Cal. vencidas</div>
+          </div>
+          <div style="background:var(--bg-inset);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:20px;font-weight:900;color:{% if cal_30 > 0 %}var(--warning){% else %}var(--text-muted){% endif %};">{{ cal_30 }}</div>
+            <div style="font-size:9px;color:var(--text-muted);font-weight:700;margin-top:2px;">Cal. próximas</div>
+          </div>
+          <div style="background:var(--bg-inset);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:20px;font-weight:900;color:{% if verif_vencidas > 0 %}var(--danger){% else %}var(--text-muted){% endif %};">{{ verif_vencidas }}</div>
+            <div style="font-size:9px;color:var(--text-muted);font-weight:700;margin-top:2px;">Verif. vencidas</div>
+          </div>
+          <div style="background:var(--bg-inset);border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:20px;font-weight:900;color:{% if mant_programados > 0 %}var(--info){% else %}var(--text-muted){% endif %};">{{ mant_programados }}</div>
+            <div style="font-size:9px;color:var(--text-muted);font-weight:700;margin-top:2px;">Mant. progr.</div>
+          </div>
+        </div>
+
+        <a href="/auditoria/" class="btn btn-outline btn-sm w-full" style="margin-top:12px;">
+          <i class="fas fa-clipboard-check"></i> Ver listado general
+        </a>
+      </div>
+    </div>
+
+    {# Por área #}
+    {% if por_area %}
+    <div class="card">
+      <div class="card-header" style="padding:12px 16px;">
+        <span class="card-title" style="font-size:13px;">
+          <i class="fas fa-building" style="color:var(--primary-light);margin-right:6px;"></i>Por área
+        </span>
+      </div>
+      <div class="card-body" style="padding:12px 16px;">
+        {% set max_area = por_area.values() | max %}
+        {% for area, cant in por_area.items() %}
+        <div>
+          <div class="area-label">
+            <span style="color:var(--text);font-weight:500;">{{ area }}</span>
+            <span style="color:var(--text-muted);font-weight:700;">{{ cant }}</span>
+          </div>
+          <div class="area-track">
+            <div class="area-fill" style="width:{{ ((cant / max_area) * 100)|round|int }}%;"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

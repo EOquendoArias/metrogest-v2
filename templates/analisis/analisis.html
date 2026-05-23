@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+{% block title %}Análisis — {{ calibracion.numero_certificado or calibracion.id }}{% endblock %}
+{% block page_title %}Análisis de resultados de calibración{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/calibraciones/magnitud/{{ magnitud.id }}" style="color:var(--primary);text-decoration:none;">{{ magnitud.nombre }}</a> / Análisis
+{% endblock %}
+{% block topbar_actions %}
+{% if puntos and usuario_actual.rol != 'solo_lectura' and not aprobado %}
+<form method="post" action="/analisis/{{ calibracion.id }}/aprobar" style="display:inline;">
+  <input type="hidden" name="obs_aprobacion" value="">
+  <button type="submit" class="btn btn-success"
+          onclick="return confirm('¿Confirmar aprobación? El equipo pasará a OPERATIVO.')">
+    <i class="fas fa-check-circle"></i> Aprobar y poner en uso
+  </button>
+</form>
+{% elif aprobado %}
+<span class="badge badge-success" style="font-size:12px;padding:8px 16px;">
+  <i class="fas fa-check-circle"></i>
+  Aprobado — {{ aprobado_por.nombre if aprobado_por else '' }}
+  · {{ fecha_aprobacion.strftime('%d/%m/%Y') if fecha_aprobacion else '' }}
+</span>
+{% endif %}
+<a href="/analisis/{{ calibracion.id }}/pdf" target="_blank" class="btn btn-outline btn-sm">
+  <i class="fas fa-file-pdf"></i> PDF
+</a>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+/* Filas de la tabla — usan variables de tema */
+.sem-ok   { background: var(--sem-ok-bg);   border-left: 3px solid var(--sem-ok-border); }
+.sem-fail { background: var(--sem-fail-bg);  border-left: 3px solid var(--sem-fail-border); }
+.sem-nd   { background: var(--sem-nd-bg);    border-left: 2px solid var(--sem-nd-border); }
+
+.toggle-pill {
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 14px; border-radius:20px; font-size:13px; font-weight:600;
+  cursor:pointer; border: 1px solid transparent; transition:all 0.2s;
+}
+.toggle-on  { background: rgba(59,130,246,0.15); color: var(--primary-light); border-color: rgba(59,130,246,0.3); }
+.toggle-off { background: var(--bg-inset); color: var(--text-muted); border-color: var(--border); }
+
+/* Info boxes — sobreescriben los inline bg hardcodeados */
+.info-box-green {
+  background: var(--info-green-bg);
+  color: var(--info-green-text);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.info-box-amber {
+  background: var(--info-amber-bg);
+  color: var(--info-amber-text);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.info-box-blue {
+  background: var(--info-blue-bg);
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: 8px;
+  padding: 14px;
+}
+.info-box-blue .eq-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  color: var(--primary-light); margin-bottom: 4px;
+}
+.info-box-blue .eq-text {
+  font-family: monospace; font-size: 14px; font-weight: 700;
+  color: var(--info-blue-text);
+}
+
+/* Mini-cards de resumen (Aprueban / Fallan) */
+.mini-card-ok {
+  text-align:center; padding:10px 16px; border-radius:8px;
+  background: var(--sem-ok-bg);
+  border: 1px solid var(--sem-ok-border);
+}
+.mini-card-fail {
+  text-align:center; padding:10px 16px; border-radius:8px;
+  background: var(--sem-fail-bg);
+  border: 1px solid var(--sem-fail-border);
+}
+
+/* Celda de datos resumen del certificado */
+.cert-cell {
+  text-align:center; padding:10px;
+  background: var(--bg-inset);
+  border-radius:8px;
+  border: 1px solid var(--border-light);
+}
+.cert-cell .cert-lbl { font-size:10px; color:var(--text-muted); margin-bottom:2px; }
+.cert-cell .cert-val { font-size:13px; font-weight:700; color:var(--text-strong, var(--text)); }
+
+/* Fila destacada de regresión seleccionada */
+tr.reg-selected td { background: var(--sem-ok-bg) !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── AVISO SEGUNDA CALIBRACIÓN ─────────────────────────────────────────────── #}
+{% if es_segunda_o_posterior and not calibracion.proxima_calibracion %}
+<div class="alert alert-warning" style="margin-bottom:20px;">
+  <div style="font-weight:700;font-size:14px;margin-bottom:6px;">
+    <i class="fas fa-rotate"></i> Segunda calibración o posterior — Define el siguiente período
+  </div>
+  <div style="font-size:13px;opacity:0.85;margin-bottom:12px;">
+    Ya existe un análisis inicial. Elige el método para calcular el próximo intervalo de calibración:
+  </div>
+  <a href="/ilac/periodo/{{ magnitud.id }}" class="btn btn-accent btn-sm">
+    <i class="fas fa-calendar-plus"></i> Definir nuevo período de calibración
+  </a>
+</div>
+{% endif %}
+
+{# ── INFO CERTIFICADO ─────────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px;">
+      {% for lbl,val in [
+        ('Certificado', calibracion.numero_certificado or 'Sin número'),
+        ('Laboratorio', calibracion.laboratorio or '—'),
+        ('Fecha cal.', calibracion.fecha_calibracion.strftime('%d/%m/%Y')),
+        ('EMP', magnitud.emp_texto or '—'),
+      ] %}
+      <div class="cert-cell">
+        <div class="cert-lbl">{{ lbl }}</div>
+        <div class="cert-val">{{ val }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# Toggle incertidumbre #}
+    <div style="display:flex;align-items:center;gap:12px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap;">
+      <span style="font-size:13px;font-weight:600;color:var(--text-muted);">Criterio de conformidad:</span>
+      <form method="post" action="/analisis/{{ calibracion.id }}/toggle-incertidumbre">
+        <input type="hidden" name="usar" value="{{ 'false' if usar_incertidumbre else 'true' }}">
+        <button type="submit" class="toggle-pill {{ 'toggle-on' if usar_incertidumbre else 'toggle-off' }}">
+          <i class="fas {{ 'fa-toggle-on' if usar_incertidumbre else 'fa-toggle-off' }}"></i>
+          {% if usar_incertidumbre %}
+            Con incertidumbre — |Error| + U ≤ EMP
+          {% else %}
+            Sin incertidumbre — |Error| ≤ EMP
+          {% endif %}
+        </button>
+      </form>
+      <span style="font-size:11px;color:var(--text-muted);">
+        (clic para cambiar)
+      </span>
+    </div>
+
+    {% if calibracion.proxima_calibracion %}
+    <div class="info-box-green" style="margin-top:10px;">
+      <i class="fas fa-calendar-check"></i>
+      Próxima calibración: <strong>{{ calibracion.proxima_calibracion.strftime('%d/%m/%Y') }}</strong>
+    </div>
+    {% elif not es_segunda_o_posterior %}
+    <div class="info-box-amber" style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span><i class="fas fa-triangle-exclamation"></i> Próxima calibración no definida.</span>
+      <a href="/ilac/riesgo/{{ magnitud.id }}" class="btn btn-outline btn-sm">
+        Hacer análisis inicial →
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── SEMÁFORO RESUMEN ─────────────────────────────────────────────────────── #}
+{% if puntos %}
+<div class="card mb-4">
+  <div class="card-body" style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+    <div style="flex:1;">
+      <div style="font-size:14px;font-weight:700;color:{% if fail==0 and ok>0 %}var(--success){% elif fail>0 %}var(--danger){% else %}var(--warning){% endif %};">
+        {% if fail==0 and ok>0 %}<i class="fas fa-circle-check"></i> Todos los puntos aprueban — equipo conforme
+        {% elif fail>0 %}<i class="fas fa-circle-xmark"></i> {{ fail }} punto(s) fuera de tolerancia
+        {% else %}<i class="fas fa-triangle-exclamation"></i> Análisis incompleto{% endif %}
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">
+        Criterio: {% if usar_incertidumbre %}|Error| + U ≤ EMP{% else %}|Error| ≤ EMP{% endif %} por punto
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <div class="mini-card-ok">
+        <div style="font-size:22px;font-weight:800;color:var(--success);">{{ ok }}</div>
+        <div style="font-size:11px;color:var(--text-muted);">Aprueban</div>
+      </div>
+      <div class="mini-card-fail">
+        <div style="font-size:22px;font-weight:800;color:var(--danger);">{{ fail }}</div>
+        <div style="font-size:11px;color:var(--text-muted);">Fallan</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-2 mb-4" style="align-items:start;">
+
+  {# ── FORMULARIO AGREGAR PUNTO ─────────────────────────────────────────── #}
+  {% if usuario_actual.rol != 'solo_lectura' %}
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="fas fa-plus-circle" style="color:var(--primary);margin-right:6px;"></i>Agregar punto</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/analisis/{{ calibracion.id }}/punto">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Valor patrón <span class="req">*</span></label>
+            <input type="number" step="any" name="valor_patron" class="form-control"
+                   required placeholder="{{ magnitud.unidad or '' }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor indicado <span class="req">*</span></label>
+            <input type="number" step="any" name="valor_indicado" class="form-control"
+                   required placeholder="Lectura del equipo">
+          </div>
+        </div>
+        {% if usar_incertidumbre %}
+        <div class="form-group">
+          <label class="form-label">Incertidumbre expandida U</label>
+          <input type="number" step="any" name="incertidumbre" class="form-control"
+                 placeholder="Del certificado del laboratorio">
+          <div class="form-hint">Valor U sin especificar k — se usa directamente en |Error| + U ≤ EMP</div>
+        </div>
+        {% else %}
+        <input type="hidden" name="incertidumbre" value="">
+        {% endif %}
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Tolerancia inferior</label>
+            <input type="number" step="any" name="tolerancia_inf" class="form-control"
+                   placeholder="Usa −EMP si vacío">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tolerancia superior</label>
+            <input type="number" step="any" name="tolerancia_sup" class="form-control"
+                   placeholder="Usa +EMP si vacío">
+          </div>
+        </div>
+        {% if magnitud.tipo_instrumento == 'discreto' %}
+        <div class="form-group">
+          <label class="form-label">EMP de este punto (pesas: varía por ítem)</label>
+          <input type="number" step="any" name="emp_punto" class="form-control">
+        </div>
+        {% else %}
+        <input type="hidden" name="emp_punto" value="">
+        {% endif %}
+        <div class="form-group">
+          <label class="form-label">Observación</label>
+          <input type="text" name="observacion" class="form-control" placeholder="Opcional">
+        </div>
+        <button type="submit" class="btn btn-primary w-full">
+          <i class="fas fa-plus"></i> Agregar punto
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── TABLA DE PUNTOS ─────────────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Puntos registrados ({{ puntos|length }})</span>
+    </div>
+    {% if puntos %}
+    <div style="overflow-x:auto;">
+      <table class="table" style="font-size:11px;">
+        <thead>
+          <tr>
+            <th>#</th><th>Patrón</th><th>Indicado</th><th>Error</th>
+            {% if usar_incertidumbre %}<th>U</th><th>|E|+U</th>{% endif %}
+            <th>EMP</th><th>✓</th>
+            {% if usuario_actual.rol!='solo_lectura' %}<th></th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in puntos %}
+          <tr class="{% if p.dentro_tolerancia==true %}sem-ok{% elif p.dentro_tolerancia==false %}sem-fail{% else %}sem-nd{% endif %}">
+            <td style="font-weight:700;">{{ p.numero_punto }}</td>
+            <td>{{ p.valor_patron }}</td>
+            <td>{{ p.valor_indicado }}</td>
+            <td style="font-weight:700;">{{ '%+.5g'|format(p.error) if p.error is not none else '—' }}</td>
+            {% if usar_incertidumbre %}
+            <td>{{ '%.4g'|format(p.incertidumbre) if p.incertidumbre is not none else '—' }}</td>
+            <td style="font-weight:700;">{{ '%.5g'|format(p.abs_error_mas_u) if p.abs_error_mas_u is not none else '—' }}</td>
+            {% endif %}
+            <td>{{ '%.4g'|format(p.emp_punto) if p.emp_punto is not none else '—' }}</td>
+            <td>
+              {% if p.dentro_tolerancia==true %}<span style="color:var(--success);font-size:14px;font-weight:700;">✓</span>
+              {% elif p.dentro_tolerancia==false %}<span style="color:var(--danger);font-size:14px;font-weight:700;">✗</span>
+              {% else %}<span style="color:#94a3b8;">—</span>{% endif %}
+            </td>
+            {% if usuario_actual.rol!='solo_lectura' %}
+            <td>
+              <form method="post" action="/analisis/{{ calibracion.id }}/punto/{{ p.id }}/eliminar"
+                    onsubmit="return confirm('¿Eliminar?')">
+                <button type="submit" class="btn btn-sm btn-danger" style="padding:2px 6px;">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </form>
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card-body" style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px;">
+      Ingresa los puntos de calibración del certificado.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── GRÁFICA ──────────────────────────────────────────────────────────────── #}
+{% if puntos|length >= 2 %}
+<div class="card mb-4">
+  <div class="card-header">
+    <span class="card-title">
+      <i class="fas fa-chart-line" style="color:var(--accent);margin-right:8px;"></i>
+      Gráfica de errores con banda de tolerancia{% if usar_incertidumbre %} e incertidumbre{% endif %}
+    </span>
+  </div>
+  <div class="card-body">
+    <canvas id="grafica" height="280"></canvas>
+  </div>
+</div>
+
+{# ── REGRESIÓN ────────────────────────────────────────────────────────────── #}
+{% if magnitud.tipo_instrumento != 'discreto' and regresiones %}
+<div class="card mb-4">
+  <div class="card-header">
+    <span class="card-title">
+      <i class="fas fa-function" style="color:var(--primary);margin-right:8px;"></i>
+      Regresión polinomial — selecciona el mejor ajuste
+    </span>
+  </div>
+  <div class="card-body">
+    <div style="overflow-x:auto;margin-bottom:14px;">
+      <table class="table" style="font-size:13px;">
+        <thead>
+          <tr><th>Grado</th><th>R²</th><th>Se</th><th>Ecuación</th><th>Acción</th></tr>
+        </thead>
+        <tbody>
+          {% for r in regresiones %}
+          <tr {% if r.grado==mejor_grado %}class="reg-selected"{% endif %}>
+            <td>
+              <strong>Grado {{ r.grado }}</strong>
+              {% if loop.first %}<span class="badge badge-success" style="font-size:9px;">Mejor R²</span>{% endif %}
+            </td>
+            <td style="font-size:15px;font-weight:800;color:{% if r.r2>=0.999 %}var(--success){% elif r.r2>=0.99 %}var(--warning){% else %}var(--danger){% endif %};">
+              {{ r.r2 }}
+            </td>
+            <td style="font-size:12px;">{{ '%.5g'|format(r.se) if r.se else '—' }}</td>
+            <td style="font-family:monospace;font-size:11px;">
+              {{ r.ecuacion[:55] }}{% if r.ecuacion|length>55 %}…{% endif %}
+            </td>
+            <td>
+              {% if r.grado==mejor_grado %}
+              <span class="badge badge-success">★ Seleccionado</span>
+              {% else %}
+              <form method="post" action="/analisis/{{ calibracion.id }}/regresion" style="display:inline;">
+                <input type="hidden" name="grado" value="{{ r.grado }}">
+                <button type="submit" class="btn btn-outline btn-sm">Seleccionar</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if mejor_grado %}
+      {% set rs = regresiones|selectattr('grado','equalto',mejor_grado)|list %}
+      {% if rs %}
+      <div class="info-box-blue">
+        <div class="eq-label">Ecuación seleccionada — Grado {{ mejor_grado }}</div>
+        <div class="eq-text">{{ rs[0].ecuacion }}</div>
+      </div>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% elif magnitud.tipo_instrumento == 'discreto' %}
+<div class="card mb-4">
+  <div class="card-body" style="font-size:13px;color:var(--text-muted);">
+    <i class="fas fa-info-circle" style="color:var(--primary);"></i>
+    Instrumento <strong>discreto</strong> — no aplica regresión. Conformidad punto a punto.
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
+{% block scripts %}
+{% if puntos|length >= 2 %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const X    = {{ puntos|map(attribute='valor_patron')|list|tojson }};
+const E    = {{ puntos|map(attribute='error')|list|tojson }};
+const U    = {{ puntos|map(attribute='incertidumbre')|list|tojson }};
+const TS   = {{ puntos|map(attribute='tolerancia_sup')|list|tojson }};
+const TI   = {{ puntos|map(attribute='tolerancia_inf')|list|tojson }};
+const DT   = {{ puntos|map(attribute='dentro_tolerancia')|list|tojson }};
+const USAR_U = {{ 'true' if usar_incertidumbre else 'false' }};
+{% if historico %}
+const HIST = [{% for h in historico %}{"label":"{{ h.numero_certificado or h.fecha_calibracion.strftime('%d/%m/%Y') }}","pts":{{ h.puntos|map(attribute='valor_patron')|list|tojson }},"err":{{ h.puntos|map(attribute='error')|list|tojson }}},{% endfor %}];
+{% else %}const HIST=[];{% endif %}
+{% if regresiones and mejor_grado %}
+const RCOEF = {{ (regresiones|selectattr('grado','equalto',mejor_grado)|list|first).coef|tojson }};
+const RGRADO = {{ mejor_grado }};
+const RR2    = {{ (regresiones|selectattr('grado','equalto',mejor_grado)|list|first).r2 }};
+{% else %}const RCOEF=null;const RGRADO=null;const RR2=null;{% endif %}
+
+const datasets = [];
+
+// Banda tolerancia
+if(TS.some(v=>v!==null)){
+  datasets.push({label:'Tol+',data:X.map((x,i)=>({x,y:TS[i]})),borderColor:'#dc2626',borderWidth:1.5,borderDash:[6,3],pointRadius:0,fill:false,tension:0,type:'line'});
+  datasets.push({label:'Tol-',data:X.map((x,i)=>({x,y:TI[i]})),borderColor:'#2563eb',borderWidth:1.5,borderDash:[6,3],pointRadius:0,fill:false,tension:0,type:'line'});
+}
+
+// Línea cero
+datasets.push({label:'_zero',data:X.map(x=>({x,y:0})),borderColor:'#000',borderWidth:0.8,pointRadius:0,fill:false,tension:0,type:'line'});
+
+// Histórico
+HIST.forEach((h,i)=>{
+  if(h.pts.length) datasets.push({label:h.label,data:h.pts.map((x,j)=>({x,y:h.err[j]})),borderColor:['#9ca3af','#d1d5db','#6b7280'][i%3],borderWidth:1,borderDash:[4,4],pointRadius:3,fill:false,tension:0,type:'line'});
+});
+
+// Regresión
+if(RCOEF){
+  const xr=Array.from({length:80},(_,i)=>Math.min(...X)*0.98+(Math.max(...X)*1.02-Math.min(...X)*0.98)*i/79);
+  const yr=xr.map(x=>RCOEF.reduce((a,c,i)=>a+c*Math.pow(x,RCOEF.length-1-i),0));
+  datasets.push({label:`Regresión grado ${RGRADO} (R²=${RR2})`,data:xr.map((x,i)=>({x,y:yr[i]-x})),borderColor:'#e8a020',borderWidth:2,pointRadius:0,fill:false,tension:0,type:'line'});
+}
+
+// Barras incertidumbre (solo si toggle activo)
+if(USAR_U){
+  const uVals = U.map(u=>u||0);
+  if(uVals.some(v=>v>0)){
+    datasets.push({
+      label:'U (incertidumbre)',
+      data: X.map((x,i)=>({x,y:E[i]})),
+      type:'scatter',
+      pointRadius:0,
+      borderColor:'rgba(0,0,0,0)',
+      errorBars: uVals.map(u=>({plus:u,minus:u}))
+    });
+  }
+}
+
+// Puntos con color según semáforo
+const PC = DT.map(d=>d===true?'#16a34a':d===false?'#dc2626':'#1a4f8a');
+datasets.push({
+  label:'Error actual',
+  data:X.map((x,i)=>({x,y:E[i]})),
+  borderColor:'#1a4f8a',borderWidth:2,
+  pointRadius:7,pointBackgroundColor:PC,pointBorderColor:PC,
+  fill:false,tension:0,type:'line'
+});
+
+new Chart(document.getElementById('grafica'),{
+  type:'scatter',
+  data:{datasets},
+  options:{
+    responsive:true,
+    plugins:{
+      legend:{position:'top',labels:{font:{size:11},filter:i=>!i.text.startsWith('_')}},
+      tooltip:{callbacks:{label:ctx=>{
+        if(ctx.dataset.label==='Error actual'){
+          const i=ctx.dataIndex;
+          const u=U[i];
+          const lines=[`Patrón: ${X[i]}`,`Error: ${E[i]>=0?'+':''}${E[i]}`];
+          if(USAR_U && u) lines.push(`U: ±${u}`,`|E|+U: ${(Math.abs(E[i])+u).toFixed(6)}`);
+          lines.push(`Resultado: ${DT[i]===true?'✓ Aprueba':DT[i]===false?'✗ Falla':'Sin datos'}`);
+          return lines;
+        }
+        return`${ctx.dataset.label}: (${ctx.raw.x.toFixed(4)}, ${ctx.raw.y.toFixed(6)})`;
+      }}}
+    },
+    scales:{
+      x:{title:{display:true,text:'Valor patrón ({{ magnitud.unidad or "" }})'}},
+      y:{title:{display:true,text:'Error'}}
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Mantenimientos — {{ equipo.nombre }}{% endblock %}
+{% block page_title %}Mantenimientos{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> / Mantenimientos
+{% endblock %}
+{% block topbar_actions %}
+{% if usuario_actual.rol != 'solo_lectura' %}
+<a href="/plan-mantenimiento/equipo/{{ equipo.id }}" class="btn btn-outline btn-sm"><i class="fas fa-cog"></i> Plan de mantenimiento</a>
+<a href="/mantenimientos/equipo/{{ equipo.id }}/nuevo" class="btn btn-accent btn-sm">
+  <i class="fas fa-plus"></i> Nuevo mantenimiento
+</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if mantenimientos %}
+<div style="display:flex;flex-direction:column;gap:14px;">
+{% for m in mantenimientos %}
+{% set color_tipo = {'preventivo':'info','correctivo':'danger','predictivo':'warning'} %}
+{% set color_estado = {'programado':'info','en_proceso':'warning','completado':'success','cancelado':'secondary'} %}
+{% set icon_origen = {'interno':'fa-user','externo':'fa-building'} %}
+<div class="card" style="border-left:4px solid {% if m.estado == 'completado' %}var(--success){% elif m.estado == 'en_proceso' %}var(--warning){% elif m.estado == 'cancelado' %}#94a3b8{% else %}var(--info){% endif %};">
+  <div class="card-body">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+          <span class="badge badge-{{ color_tipo.get(m.tipo,'secondary') }}" style="font-size:11px;">{{ m.tipo.title() }}</span>
+          <span class="badge badge-{{ color_estado.get(m.estado,'secondary') }}" style="font-size:11px;">{{ m.estado.replace('_',' ').title() }}</span>
+          <span style="font-size:11px;color:var(--text-muted);background:var(--bg-inset);padding:2px 8px;border-radius:10px;">
+            <i class="fas {{ icon_origen.get(m.origen,'fa-user') }}"></i> {{ m.origen.title() }}
+          </span>
+        </div>
+        <div style="font-size:15px;font-weight:700;color:var(--primary-dark);">{{ m.titulo }}</div>
+        {% if m.descripcion %}
+        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">{{ m.descripcion }}</div>
+        {% endif %}
+
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text-muted);">
+          {% if m.fecha_programada %}
+          <span><i class="fas fa-calendar"></i> Programado: {{ m.fecha_programada.strftime('%d/%m/%Y') }}</span>
+          {% endif %}
+          {% if m.fecha_fin %}
+          <span><i class="fas fa-check"></i> Completado: {{ m.fecha_fin.strftime('%d/%m/%Y') }}</span>
+          {% endif %}
+          {% if m.origen == 'interno' and m.responsable_interno %}
+          <span><i class="fas fa-user"></i> {{ m.responsable_interno }}</span>
+          {% elif m.origen == 'externo' %}
+          <span><i class="fas fa-building"></i> {{ m.empresa_externa or 'Empresa externa' }}{% if m.tecnico_externo %} — {{ m.tecnico_externo }}{% endif %}</span>
+          {% endif %}
+          {% if m.costo %}
+          <span><i class="fas fa-dollar-sign"></i> $ {{ '{:,.2f}'.format(m.costo) }}</span>
+          {% endif %}
+          {% if m.orden_trabajo %}
+          <span><i class="fas fa-file-alt"></i> OT: {{ m.orden_trabajo }}</span>
+          {% endif %}
+        </div>
+
+        {% if m.trabajo_realizado %}
+        <div style="margin-top:10px;padding:10px;background:var(--bg-inset);border-radius:6px;font-size:12px;">
+          <strong style="color:var(--text-muted);">Trabajo realizado:</strong><br>
+          {{ m.trabajo_realizado }}
+        </div>
+        {% endif %}
+
+        {% if m.requiere_calibracion or m.afecta_medicion %}
+        <div style="margin-top:8px;display:flex;gap:6px;">
+          {% if m.requiere_calibracion %}
+          <span class="badge badge-warning" style="font-size:10px;"><i class="fas fa-certificate"></i> Requiere calibración post-mantenimiento</span>
+          {% endif %}
+          {% if m.afecta_medicion %}
+          <span class="badge badge-danger" style="font-size:10px;"><i class="fas fa-triangle-exclamation"></i> Afecta la medición</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        {% if m.archivo_path %}
+        <a href="{{ m.archivo_path }}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-paperclip"></i></a>
+        {% endif %}
+        <a href="/mantenimientos/{{ m.id }}/pdf" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-file-pdf"></i></a>
+        {% if usuario_actual.rol != 'solo_lectura' %}
+        <a href="/mantenimientos/{{ m.id }}/editar" class="btn btn-outline btn-sm"><i class="fas fa-pen"></i></a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body" style="text-align:center;padding:60px;color:var(--text-muted);">
+    <i class="fas fa-wrench" style="font-size:48px;opacity:0.3;display:block;margin-bottom:16px;"></i>
+    <div style="font-size:17px;font-weight:700;margin-bottom:8px;">Sin mantenimientos registrados</div>
+    {% if usuario_actual.rol != 'solo_lectura' %}
+    <a href="/mantenimientos/equipo/{{ equipo.id }}/nuevo" class="btn btn-accent">
+      <i class="fas fa-plus"></i> Registrar primer mantenimiento
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

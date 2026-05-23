@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Nuevo Usuario{% endblock %}
+{% block page_title %}Nuevo Usuario{% endblock %}
+{% block breadcrumb %}<a href="/usuarios/" style="color:var(--primary);text-decoration:none;">Usuarios</a> / Nuevo{% endblock %}
+
+{% block content %}
+{% if error %}
+<div class="alert alert-danger"><i class="fas fa-circle-exclamation"></i> {{ error }}</div>
+{% endif %}
+
+<form method="post" action="/usuarios/nuevo" style="max-width:600px;">
+    <div class="form-section">
+        <div class="form-section-title"><i class="fas fa-user-plus"></i> Datos del Usuario</div>
+        <div class="form-group">
+            <label class="form-label">Nombre completo <span class="req">*</span></label>
+            <input type="text" name="nombre" class="form-control" required placeholder="Nombre Apellido">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Correo electrónico <span class="req">*</span></label>
+            <input type="email" name="email" class="form-control" required placeholder="correo@empresa.com">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Contraseña <span class="req">*</span></label>
+            <input type="password" name="password" class="form-control" required minlength="6">
+            <div class="form-hint">Mínimo 6 caracteres</div>
+        </div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label class="form-label">Rol <span class="req">*</span></label>
+                <select name="rol" class="form-control" required>
+                    <option value="operador">Operador</option>
+                    <option value="metrologo">Metrólogo</option>
+                    <option value="administrador">Administrador</option>
+                    <option value="solo_lectura">Solo lectura</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">WhatsApp (con código de país)</label>
+                <input type="text" name="telefono_whatsapp" class="form-control" placeholder="+573001234567">
+                <div class="form-hint">Para recibir notificaciones</div>
+            </div>
+        </div>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+        <a href="/usuarios/" class="btn btn-outline"><i class="fas fa-times"></i> Cancelar</a>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Crear usuario</button>
+    </div>
+</form>
+{% endblock %}

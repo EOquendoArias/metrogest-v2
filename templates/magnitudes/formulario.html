@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if magnitud else 'Nueva' }} magnitud{% endblock %}
+{% block page_title %}{{ 'Editar magnitud' if magnitud else 'Nueva magnitud' }}{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/magnitudes/equipo/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">Magnitudes</a> /
+  {{ 'Editar' if magnitud else 'Nueva' }}
+{% endblock %}
+
+{% block content %}
+<div class="infobox infobox-blue">
+  <i class="fas fa-lightbulb"></i> Ejemplos de magnitudes: <strong>Voltaje DC</strong>, <strong>Temperatura</strong>, <strong>Humedad relativa</strong>, <strong>Presión atmosférica</strong>, <strong>Resistencia eléctrica</strong>, <strong>Masa</strong>
+</div>
+
+<form method="post" action="{{ '/magnitudes/' ~ magnitud.id ~ '/editar' if magnitud else '/magnitudes/equipo/' ~ equipo.id ~ '/nueva' }}" style="max-width:700px;">
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-ruler"></i> Identificación de la magnitud</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Nombre de la magnitud <span class="req">*</span></label>
+        <input type="text" name="nombre" class="form-control" required
+               value="{{ magnitud.nombre if magnitud else '' }}" placeholder="Presión atmosférica">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Símbolo</label>
+        <input type="text" name="simbolo" class="form-control"
+               value="{{ magnitud.simbolo if magnitud else '' }}" placeholder="hPa, °C, V DC...">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Unidad de medida</label>
+        <input type="text" name="unidad" class="form-control"
+               value="{{ magnitud.unidad if magnitud else '' }}" placeholder="hPa, °C, V, Ω, %HR...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo de instrumento</label>
+        <select name="tipo_instrumento" class="form-control">
+          <option value="continuo" {% if not magnitud or magnitud.tipo_instrumento=='continuo' %}selected{% endif %}>Continuo — se hace regresión polinomial</option>
+          <option value="discreto" {% if magnitud and magnitud.tipo_instrumento=='discreto' %}selected{% endif %}>Discreto — pesas, ítems individuales (sin regresión)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-sliders"></i> Especificaciones técnicas</div>
+    <div class="form-grid-3">
+      <div class="form-group">
+        <label class="form-label">Rango mínimo</label>
+        <input type="number" step="any" name="rango_min" class="form-control"
+               value="{{ magnitud.rango_min if magnitud and magnitud.rango_min is not none else '' }}" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rango máximo</label>
+        <input type="number" step="any" name="rango_max" class="form-control"
+               value="{{ magnitud.rango_max if magnitud and magnitud.rango_max is not none else '' }}" placeholder="1000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Resolución</label>
+        <input type="text" name="resolucion" class="form-control"
+               value="{{ magnitud.resolucion if magnitud else '' }}" placeholder="0.1 hPa">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">EMP — Exactitud requerida (texto)</label>
+        <input type="text" name="emp_texto" class="form-control"
+               value="{{ magnitud.emp_texto if magnitud else '' }}" placeholder="± 3 hPa, ± 0.5% + 2 dígitos...">
+        <div class="form-hint">Descripción completa según el fabricante o el proceso</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Clase de exactitud</label>
+        <input type="text" name="clase_exactitud" class="form-control"
+               value="{{ magnitud.clase_exactitud if magnitud else '' }}" placeholder="Clase 0.1, Clase A, OIML E2...">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">EMP numérico (para semáforo automático)</label>
+        <input type="number" step="any" name="emp_valor" class="form-control"
+               value="{{ magnitud.emp_valor if magnitud and magnitud.emp_valor is not none else '' }}" placeholder="3">
+        <div class="form-hint">Valor numérico usado para calcular |Error| + U ≤ EMP</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Unidad del EMP</label>
+        <input type="text" name="emp_unidad" class="form-control"
+               value="{{ magnitud.emp_unidad if magnitud else '' }}" placeholder="hPa, °C, V...">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-triangle-exclamation"></i> Umbrales de verificación intermedia</div>
+    <div class="infobox infobox-amber">
+      Si el error de una verificación supera el umbral amarillo → alerta. Si supera el umbral rojo → fuera de límite.
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Umbral alerta amarilla (% del EMP)</label>
+        <input type="number" step="0.1" name="umbral_alerta_pct" class="form-control"
+               value="{{ magnitud.umbral_alerta_pct if magnitud else 70 }}" placeholder="70">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Umbral fuera de límite rojo (% del EMP)</label>
+        <input type="number" step="0.1" name="umbral_fuera_pct" class="form-control"
+               value="{{ magnitud.umbral_fuera_pct if magnitud else 100 }}" placeholder="100">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Notas adicionales</label>
+    <textarea name="notas" class="form-control" rows="2"
+              placeholder="Condiciones especiales, rangos de tolerancia por zona, observaciones técnicas...">{{ magnitud.notas if magnitud else '' }}</textarea>
+  </div>
+
+  <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px;">
+    <a href="/magnitudes/equipo/{{ equipo.id }}" class="btn btn-outline"><i class="fas fa-times"></i> Cancelar</a>
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {{ 'Guardar cambios' if magnitud else 'Crear magnitud' }}</button>
+  </div>
+</form>
+{% endblock %}

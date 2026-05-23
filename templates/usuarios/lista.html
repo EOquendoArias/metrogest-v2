@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Usuarios{% endblock %}
+{% block page_title %}Gestión de Usuarios{% endblock %}
+{% block breadcrumb %}Administración de accesos y permisos{% endblock %}
+{% block topbar_actions %}
+<a href="/usuarios/nuevo" class="btn btn-accent"><i class="fas fa-user-plus"></i> Nuevo Usuario</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">{{ usuarios|length }} usuario(s) registrado(s)</span>
+    </div>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Usuario</th>
+                <th>Correo</th>
+                <th>Rol</th>
+                <th>WhatsApp</th>
+                <th>Estado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in usuarios %}
+            <tr>
+                <td>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:36px;height:36px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:14px;">
+                            {{ u.nombre[0].upper() }}
+                        </div>
+                        <div>
+                            <div style="font-weight:700;font-size:13px;">{{ u.nombre }}</div>
+                            {% if u.id == usuario_actual.id %}
+                            <div style="font-size:11px;color:var(--primary);">← Tú</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </td>
+                <td style="font-size:13px;">{{ u.email }}</td>
+                <td>
+                    {% set rol_colors = {'administrador':'danger','metrologo':'info','operador':'warning','solo_lectura':'secondary'} %}
+                    <span class="badge badge-{{ rol_colors.get(u.rol, 'secondary') }}">
+                        {{ u.rol.replace('_',' ').title() }}
+                    </span>
+                </td>
+                <td style="font-size:13px;">{{ u.telefono_whatsapp or '—' }}</td>
+                <td>
+                    {% if u.activo %}
+                    <span class="badge badge-success"><i class="fas fa-circle"></i> Activo</span>
+                    {% else %}
+                    <span class="badge badge-secondary"><i class="fas fa-circle"></i> Inactivo</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if u.id != usuario_actual.id %}
+                    <form method="post" action="/usuarios/toggle/{{ u.id }}" style="display:inline;">
+                        <button type="submit" class="btn btn-sm {% if u.activo %}btn-outline{% else %}btn-success{% endif %}">
+                            {% if u.activo %}<i class="fas fa-user-slash"></i> Desactivar
+                            {% else %}<i class="fas fa-user-check"></i> Activar{% endif %}
+                        </button>
+                    </form>
+                    {% else %}
+                    <span style="color:var(--text-muted);font-size:12px;">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card" style="margin-top:24px;">
+    <div class="card-header"><span class="card-title">Roles y Permisos</span></div>
+    <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
+            {% for rol, desc, color in [
+                ('Administrador','Acceso total. Gestión de usuarios, equipos y configuración.','danger'),
+                ('Metrólogo','Registra calibraciones y gestiona el estado de equipos.','info'),
+                ('Operador','Consulta y registra actividades. No puede eliminar.','warning'),
+                ('Solo lectura','Solo puede ver la información. Sin modificaciones.','secondary')
+            ] %}
+            <div style="padding:14px;border-radius:8px;background:var(--bg-inset);border:1px solid var(--border);">
+                <span class="badge badge-{{ color }}" style="margin-bottom:8px;">{{ rol }}</span>
+                <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">{{ desc }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

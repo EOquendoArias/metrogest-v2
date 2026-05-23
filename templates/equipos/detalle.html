@@ -1,0 +1,706 @@
+{% extends "base.html" %}
+{% block title %}{{ equipo.nombre }}{% endblock %}
+{% block page_title %}{{ equipo.nombre }}{% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/" style="color:var(--primary);text-decoration:none;">Equipos</a> / {{ equipo.codigo }}
+{% endblock %}
+{% block topbar_actions %}
+<a href="/equipos/{{ equipo.id }}/editar" class="btn btn-outline btn-sm">
+  <i class="fas fa-pen"></i> Editar
+</a>
+{% if equipo.manual_path %}
+<a href="{{ equipo.manual_path }}" target="_blank" class="btn btn-outline btn-sm">
+  <i class="fas fa-file-pdf"></i> Manual
+</a>
+{% endif %}
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+/* ── Stepper de progreso metrológico ────────────────────────────────── */
+.mg-stepper {
+  display: flex; align-items: flex-start;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 24px 16px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
+  overflow-x: auto;
+  gap: 0;
+}
+.mg-step {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px; flex-shrink: 0; min-width: 90px;
+  text-decoration: none;
+  cursor: default;
+}
+a.mg-step { cursor: pointer; }
+a.mg-step:hover .mg-circle { filter: brightness(1.15); transform: scale(1.06); }
+
+.mg-line {
+  flex: 1; min-width: 20px; height: 3px;
+  border-radius: 2px; margin-top: 17px; /* centro del círculo: (36px/2) - 1.5px */
+  transition: background 0.3s;
+}
+.mg-line-done    { background: var(--success); }
+.mg-line-pending { background: var(--border); }
+
+.mg-circle {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800;
+  border: 2.5px solid;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.mg-circle-done {
+  background: var(--success); border-color: var(--success); color: white;
+}
+.mg-circle-next {
+  background: var(--primary); border-color: var(--primary); color: white;
+  box-shadow: 0 0 0 5px rgba(59,130,246,0.15);
+}
+.mg-circle-pending {
+  background: var(--bg-inset); border-color: var(--border); color: var(--text-muted);
+}
+
+.mg-label { text-align: center; line-height: 1.3; }
+.mg-label-tag {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.7px; margin-bottom: 2px;
+}
+.mg-label-name { font-size: 12px; font-weight: 700; white-space: nowrap; }
+
+.mg-circle-done   ~ .mg-label .mg-label-tag  { color: var(--success); }
+.mg-circle-done   ~ .mg-label .mg-label-name { color: var(--text-strong, var(--text)); }
+.mg-circle-next   ~ .mg-label .mg-label-tag  { color: var(--primary); }
+.mg-circle-next   ~ .mg-label .mg-label-name { color: var(--text-strong, var(--text)); }
+.mg-circle-pending~ .mg-label .mg-label-tag  { color: var(--text-subtle); }
+.mg-circle-pending~ .mg-label .mg-label-name { color: var(--text-muted); }
+
+/* Nota "siguiente paso" */
+.mg-next-hint {
+  margin-left: auto; flex-shrink: 0; align-self: center;
+  padding-left: 20px; font-size: 12px; color: var(--text-muted);
+  border-left: 1px solid var(--border); margin-left: 18px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 160px;
+}
+.mg-next-hint strong { color: var(--primary); font-size: 13px; }
+
+@media (max-width: 768px) {
+  .mg-stepper { padding: 14px 12px; }
+  .mg-step { min-width: 64px; }
+  .mg-label-name { font-size: 10px; }
+  .mg-next-hint { display: none; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── 1. CABECERA ─────────────────────────────────────────────────────────────#}
+<div class="card mb-4">
+  <div class="card-body">
+    <div style="display:flex;gap:20px;align-items:flex-start;">
+      {% if equipo.foto_path %}
+      <img src="{{ equipo.foto_path }}"
+           style="width:110px;height:110px;object-fit:cover;border-radius:10px;border:2px solid var(--border);flex-shrink:0;">
+      {% else %}
+      <div class="img-placeholder" style="width:110px;height:110px;flex-shrink:0;">
+        <i class="fas fa-ruler-combined" style="font-size:40px;"></i>
+      </div>
+      {% endif %}
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+          <h2 style="font-size:22px;font-weight:800;color:var(--primary-dark);">{{ equipo.nombre }}</h2>
+          {% set ec={'operativo':'success','en_espera_calibracion':'warning','en_calibracion':'info','en_mantenimiento':'warning','fuera_de_uso':'danger','dado_de_baja':'secondary'}.get(equipo.estado,'secondary') %}
+          <span class="badge badge-{{ ec }}" style="font-size:13px;padding:5px 12px;">
+            {{ equipo.estado.replace('_',' ').title() }}
+          </span>
+        </div>
+        <div style="font-size:14px;color:var(--text-muted);margin-bottom:6px;">
+          <strong>{{ equipo.codigo }}</strong>
+          {% if equipo.marca %} · {{ equipo.marca }}{% endif %}
+          {% if equipo.modelo %} {{ equipo.modelo }}{% endif %}
+          {% if equipo.numero_serie %} · S/N: {{ equipo.numero_serie }}{% endif %}
+        </div>
+        {% if equipo.descripcion %}
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">{{ equipo.descripcion }}</div>
+        {% endif %}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          {% if equipo.apto_para_uso %}
+          <span class="badge badge-success"><i class="fas fa-check-circle"></i> Apto para uso</span>
+          {% endif %}
+          {% if equipo.confirmacion_metrologica %}
+          <span class="badge badge-info"><i class="fas fa-shield"></i> Confirmación metrológica</span>
+          {% endif %}
+          {% if equipo.area %}
+          <span class="badge badge-secondary"><i class="fas fa-building"></i> {{ equipo.area }}</span>
+          {% endif %}
+          {% if equipo.responsable %}
+          <span class="badge badge-secondary"><i class="fas fa-user"></i> {{ equipo.responsable }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {# ── Panel de estado metrológico ──────────────────────────────── #}
+      <div style="min-width:210px;max-width:230px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+
+        {# — Calibración — #}
+        {% if prox_fecha %}
+          {% if dias < 0 %}
+            {% set c_bg='rgba(239,68,68,0.12)' %}{% set c_border='rgba(239,68,68,0.35)' %}
+            {% set c_color='var(--danger)' %}{% set c_icon='fa-circle-xmark' %}
+            {% set c_tag='⚠ CALIBRACIÓN VENCIDA' %}
+            {% set c_sub='Vencida hace ' ~ (dias|abs) ~ ' días' %}
+          {% elif dias == 0 %}
+            {% set c_bg='rgba(239,68,68,0.10)' %}{% set c_border='rgba(239,68,68,0.35)' %}
+            {% set c_color='var(--danger)' %}{% set c_icon='fa-circle-exclamation' %}
+            {% set c_tag='⚠ CALIBRACIÓN HOY' %}
+            {% set c_sub='Vence hoy' %}
+          {% elif dias <= 30 %}
+            {% set c_bg='rgba(245,158,11,0.10)' %}{% set c_border='rgba(245,158,11,0.35)' %}
+            {% set c_color='var(--warning)' %}{% set c_icon='fa-clock' %}
+            {% set c_tag='CALIBRACIÓN PRÓXIMA' %}
+            {% set c_sub='En ' ~ dias ~ ' días' %}
+          {% else %}
+            {% set c_bg='rgba(34,197,94,0.07)' %}{% set c_border='rgba(34,197,94,0.25)' %}
+            {% set c_color='var(--success)' %}{% set c_icon='fa-certificate' %}
+            {% set c_tag='PRÓXIMA CALIBRACIÓN' %}
+            {% set c_sub='En ' ~ dias ~ ' días' %}
+          {% endif %}
+        {% else %}
+          {% set c_bg='var(--bg-inset)' %}{% set c_border='var(--border)' %}
+          {% set c_color='var(--text-muted)' %}{% set c_icon='fa-certificate' %}
+          {% set c_tag='CALIBRACIÓN' %}{% set c_sub='Sin programar' %}
+        {% endif %}
+        <div style="background:{{ c_bg }};border:1px solid {{ c_border }};border-radius:8px;padding:10px 13px;">
+          <div style="font-size:9px;font-weight:800;letter-spacing:0.8px;color:{{ c_color }};margin-bottom:5px;text-transform:uppercase;">
+            <i class="fas {{ c_icon }}" style="margin-right:3px;"></i>{{ c_tag }}
+          </div>
+          <div style="font-size:{% if prox_fecha %}18px{% else %}13px{% endif %};font-weight:900;color:{{ c_color }};line-height:1.1;">
+            {{ prox_fecha.strftime('%d/%m/%Y') if prox_fecha else 'Sin programar' }}
+          </div>
+          {% if prox_fecha %}<div style="font-size:11px;color:{{ c_color }};margin-top:3px;font-weight:600;">{{ c_sub }}</div>{% endif %}
+        </div>
+
+        {# — Verificación — #}
+        {% if prox_verif %}
+          {% if prox_verif_dias < 0 %}
+            {% set v_bg='rgba(239,68,68,0.12)' %}{% set v_border='rgba(239,68,68,0.35)' %}
+            {% set v_color='var(--danger)' %}{% set v_icon='fa-circle-xmark' %}
+            {% set v_tag='⚠ VERIFICACIÓN VENCIDA' %}
+            {% set v_sub='Vencida hace ' ~ (prox_verif_dias|abs) ~ ' días' %}
+          {% elif prox_verif_dias <= 30 %}
+            {% set v_bg='rgba(245,158,11,0.10)' %}{% set v_border='rgba(245,158,11,0.35)' %}
+            {% set v_color='var(--warning)' %}{% set v_icon='fa-clock' %}
+            {% set v_tag='VERIFICACIÓN PRÓXIMA' %}
+            {% set v_sub='En ' ~ prox_verif_dias ~ ' días' %}
+          {% else %}
+            {% set v_bg='rgba(34,197,94,0.07)' %}{% set v_border='rgba(34,197,94,0.25)' %}
+            {% set v_color='var(--success)' %}{% set v_icon='fa-check-double' %}
+            {% set v_tag='PRÓXIMA VERIFICACIÓN' %}
+            {% set v_sub='En ' ~ prox_verif_dias ~ ' días' %}
+          {% endif %}
+        {% else %}
+          {% set v_bg='var(--bg-inset)' %}{% set v_border='var(--border)' %}
+          {% set v_color='var(--text-muted)' %}{% set v_icon='fa-check-double' %}
+          {% set v_tag='VERIFICACIÓN' %}{% set v_sub='No configurada' %}
+        {% endif %}
+        <div style="background:{{ v_bg }};border:1px solid {{ v_border }};border-radius:8px;padding:10px 13px;">
+          <div style="font-size:9px;font-weight:800;letter-spacing:0.8px;color:{{ v_color }};margin-bottom:5px;text-transform:uppercase;">
+            <i class="fas {{ v_icon }}" style="margin-right:3px;"></i>{{ v_tag }}
+          </div>
+          <div style="font-size:{% if prox_verif %}18px{% else %}13px{% endif %};font-weight:900;color:{{ v_color }};line-height:1.1;">
+            {{ prox_verif.strftime('%d/%m/%Y') if prox_verif else 'No configurada' }}
+          </div>
+          {% if prox_verif %}<div style="font-size:11px;color:{{ v_color }};margin-top:3px;font-weight:600;">{{ v_sub }}</div>{% endif %}
+        </div>
+
+        {# — Mantenimiento — #}
+        {% if prox_mant %}
+          {% if prox_mant_dias < 0 %}
+            {% set m_bg='rgba(239,68,68,0.12)' %}{% set m_border='rgba(239,68,68,0.35)' %}
+            {% set m_color='var(--danger)' %}{% set m_icon='fa-circle-xmark' %}
+            {% set m_tag='⚠ MANTENIMIENTO VENCIDO' %}
+            {% set m_sub='Vencido hace ' ~ (prox_mant_dias|abs) ~ ' días' %}
+          {% elif prox_mant_dias <= 15 %}
+            {% set m_bg='rgba(245,158,11,0.10)' %}{% set m_border='rgba(245,158,11,0.35)' %}
+            {% set m_color='var(--warning)' %}{% set m_icon='fa-clock' %}
+            {% set m_tag='MANTENIMIENTO PRÓXIMO' %}
+            {% set m_sub='En ' ~ prox_mant_dias ~ ' días' %}
+          {% else %}
+            {% set m_bg='rgba(245,158,11,0.06)' %}{% set m_border='var(--border)' %}
+            {% set m_color='var(--warning)' %}{% set m_icon='fa-wrench' %}
+            {% set m_tag='PRÓXIMO MANTENIMIENTO' %}
+            {% set m_sub='En ' ~ prox_mant_dias ~ ' días' %}
+          {% endif %}
+        {% else %}
+          {% set mants_ok = equipo.mantenimientos|selectattr('fecha_fin')|list|sort(attribute='fecha_fin',reverse=True) %}
+          {% if mants_ok %}
+            {% set m_bg='var(--bg-inset)' %}{% set m_border='var(--border)' %}
+            {% set m_color='var(--text-muted)' %}{% set m_icon='fa-wrench' %}
+            {% set m_tag='ÚLTIMO MANTENIMIENTO' %}
+            {% set m_sub=mants_ok[0].tipo.title() %}
+            {% set m_fecha=mants_ok[0].fecha_fin %}
+          {% else %}
+            {% set m_bg='var(--bg-inset)' %}{% set m_border='var(--border)' %}
+            {% set m_color='var(--text-subtle)' %}{% set m_icon='fa-wrench' %}
+            {% set m_tag='MANTENIMIENTO' %}{% set m_sub='Sin registros' %}{% set m_fecha=none %}
+          {% endif %}
+        {% endif %}
+        <div style="background:{{ m_bg }};border:1px solid {{ m_border }};border-radius:8px;padding:10px 13px;">
+          <div style="font-size:9px;font-weight:800;letter-spacing:0.8px;color:{{ m_color }};margin-bottom:5px;text-transform:uppercase;">
+            <i class="fas {{ m_icon }}" style="margin-right:3px;"></i>{{ m_tag }}
+          </div>
+          <div style="font-size:{% if prox_mant or (mants_ok is defined and mants_ok) %}18px{% else %}13px{% endif %};font-weight:900;color:{{ m_color }};line-height:1.1;">
+            {% if prox_mant %}{{ prox_mant.strftime('%d/%m/%Y') }}
+            {% elif mants_ok is defined and mants_ok %}{{ mants_ok[0].fecha_fin.strftime('%d/%m/%Y') }}
+            {% else %}Sin registros{% endif %}
+          </div>
+          {% if prox_mant or (mants_ok is defined and mants_ok) %}
+          <div style="font-size:11px;color:{{ m_color }};margin-top:3px;font-weight:600;">
+            {% if prox_mant %}{{ m_sub }}{% elif mants_ok is defined and mants_ok %}{{ mants_ok[0].tipo.title() }}{% endif %}
+          </div>
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── 2. STEPPER DE PROGRESO METROLÓGICO ─────────────────────────────────────#}
+{#   Calcular estado real de cada paso                                         #}
+{% set mags_activas = equipo.magnitudes|selectattr('activa')|list %}
+{% set tiene_mags = mags_activas|length > 0 %}
+{% set tiene_cals = false %}
+{% set tiene_verif = false %}
+{% set tiene_intervalo = false %}
+{% for mag in mags_activas %}
+  {% if mag.calibraciones %}{% set tiene_cals = true %}{% endif %}
+  {% if mag.plan_verificacion and mag.plan_verificacion.activo %}{% set tiene_verif = true %}{% endif %}
+  {% for cal in mag.calibraciones %}
+    {% if cal.metodo_periodo %}{% set tiene_intervalo = true %}{% endif %}
+  {% endfor %}
+{% endfor %}
+
+{# Definir estado de cada paso: 'done' | 'next' | 'pending' #}
+{# Paso 1: siempre done. Siguiente = primer paso no hecho #}
+{% set p2 = 'done' if tiene_mags else ('next' if not tiene_mags else 'pending') %}
+{% set p2 = 'done' if tiene_mags else 'next' %}
+{% set p3 = 'done' if tiene_cals else ('next' if tiene_mags else 'pending') %}
+{% set p4 = 'done' if tiene_verif else ('next' if tiene_cals else 'pending') %}
+{% set p5 = 'done' if tiene_intervalo else ('next' if tiene_cals else 'pending') %}
+
+{# Conteo y mensaje de siguiente acción #}
+{% set pasos_hechos = 1 + (1 if tiene_mags else 0) + (1 if tiene_cals else 0) + (1 if tiene_verif else 0) + (1 if tiene_intervalo else 0) %}
+{% if not tiene_mags %}
+  {% set siguiente_txt = 'Agrega magnitudes' %}
+  {% set siguiente_url = '/magnitudes/equipo/' ~ equipo.id %}
+{% elif not tiene_cals %}
+  {% set siguiente_txt = 'Registra calibración' %}
+  {% set siguiente_url = '/magnitudes/equipo/' ~ equipo.id %}
+{% elif not tiene_verif %}
+  {% set siguiente_txt = 'Configura verificaciones' %}
+  {% set siguiente_url = '/magnitudes/equipo/' ~ equipo.id %}
+{% elif not tiene_intervalo %}
+  {% set siguiente_txt = 'Define el intervalo' %}
+  {% set siguiente_url = '/magnitudes/equipo/' ~ equipo.id %}
+{% else %}
+  {% set siguiente_txt = '¡Equipo completo!' %}
+  {% set siguiente_url = '' %}
+{% endif %}
+
+<div class="mg-stepper">
+
+  {# Paso 1 — Equipo (siempre done) #}
+  <div class="mg-step">
+    <div class="mg-circle mg-circle-done"><i class="fas fa-check" style="font-size:12px;"></i></div>
+    <div class="mg-label">
+      <div class="mg-label-tag">Paso 1</div>
+      <div class="mg-label-name">Equipo</div>
+    </div>
+  </div>
+
+  <div class="mg-line {% if tiene_mags %}mg-line-done{% else %}mg-line-pending{% endif %}"></div>
+
+  {# Paso 2 — Magnitudes #}
+  {% if p2 == 'next' %}
+  <a href="/magnitudes/equipo/{{ equipo.id }}" class="mg-step">
+  {% else %}<div class="mg-step">{% endif %}
+    <div class="mg-circle mg-circle-{{ p2 }}">
+      {% if p2 == 'done' %}<i class="fas fa-check" style="font-size:12px;"></i>
+      {% elif p2 == 'next' %}<i class="fas fa-arrow-right" style="font-size:11px;"></i>
+      {% else %}2{% endif %}
+    </div>
+    <div class="mg-label">
+      <div class="mg-label-tag">Paso 2</div>
+      <div class="mg-label-name">Magnitudes</div>
+    </div>
+  {% if p2 == 'next' %}</a>{% else %}</div>{% endif %}
+
+  <div class="mg-line {% if tiene_cals %}mg-line-done{% else %}mg-line-pending{% endif %}"></div>
+
+  {# Paso 3 — Calibración #}
+  {% if p3 == 'next' and mags_activas %}
+  <a href="/magnitudes/equipo/{{ equipo.id }}" class="mg-step">
+  {% else %}<div class="mg-step">{% endif %}
+    <div class="mg-circle mg-circle-{{ p3 }}">
+      {% if p3 == 'done' %}<i class="fas fa-check" style="font-size:12px;"></i>
+      {% elif p3 == 'next' %}<i class="fas fa-arrow-right" style="font-size:11px;"></i>
+      {% else %}3{% endif %}
+    </div>
+    <div class="mg-label">
+      <div class="mg-label-tag">Paso 3</div>
+      <div class="mg-label-name">Calibración</div>
+    </div>
+  {% if p3 == 'next' and mags_activas %}</a>{% else %}</div>{% endif %}
+
+  <div class="mg-line {% if tiene_verif %}mg-line-done{% else %}mg-line-pending{% endif %}"></div>
+
+  {# Paso 4 — Verificación #}
+  {% if p4 == 'next' and mags_activas %}
+  <a href="/magnitudes/equipo/{{ equipo.id }}" class="mg-step">
+  {% else %}<div class="mg-step">{% endif %}
+    <div class="mg-circle mg-circle-{{ p4 }}">
+      {% if p4 == 'done' %}<i class="fas fa-check" style="font-size:12px;"></i>
+      {% elif p4 == 'next' %}<i class="fas fa-arrow-right" style="font-size:11px;"></i>
+      {% else %}4{% endif %}
+    </div>
+    <div class="mg-label">
+      <div class="mg-label-tag">Paso 4</div>
+      <div class="mg-label-name">Verificación</div>
+    </div>
+  {% if p4 == 'next' and mags_activas %}</a>{% else %}</div>{% endif %}
+
+  <div class="mg-line {% if tiene_intervalo %}mg-line-done{% else %}mg-line-pending{% endif %}"></div>
+
+  {# Paso 5 — Intervalo #}
+  {% if p5 == 'next' and mags_activas %}
+  <a href="/magnitudes/equipo/{{ equipo.id }}" class="mg-step">
+  {% else %}<div class="mg-step">{% endif %}
+    <div class="mg-circle mg-circle-{{ p5 }}">
+      {% if p5 == 'done' %}<i class="fas fa-check" style="font-size:12px;"></i>
+      {% elif p5 == 'next' %}<i class="fas fa-arrow-right" style="font-size:11px;"></i>
+      {% else %}5{% endif %}
+    </div>
+    <div class="mg-label">
+      <div class="mg-label-tag">Paso 5</div>
+      <div class="mg-label-name">Intervalo</div>
+    </div>
+  {% if p5 == 'next' and mags_activas %}</a>{% else %}</div>{% endif %}
+
+  {# Nota lateral: progreso + siguiente acción #}
+  <div class="mg-next-hint">
+    <div style="font-size:10px;color:var(--text-muted);">{{ pasos_hechos }}/5 completados</div>
+    {% if siguiente_url %}
+    <strong>→ {{ siguiente_txt }}</strong>
+    <a href="{{ siguiente_url }}" class="btn btn-primary btn-sm" style="margin-top:2px;font-size:11px;">
+      Ir ahora <i class="fas fa-arrow-right"></i>
+    </a>
+    {% else %}
+    <strong style="color:var(--success);">✓ {{ siguiente_txt }}</strong>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ── 3. ACCESOS DIRECTOS ─────────────────────────────────────────────────────#}
+<div class="card mb-4">
+  <div class="card-body" style="padding:14px 18px;">
+    <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">
+      <i class="fas fa-bolt" style="color:var(--accent);margin-right:6px;"></i>Acciones rápidas
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="/magnitudes/equipo/{{ equipo.id }}" class="btn btn-primary btn-sm">
+        <i class="fas fa-ruler-combined"></i> Magnitudes
+      </a>
+      {% for mag in equipo.magnitudes if mag.activa %}
+      <a href="/calibraciones/magnitud/{{ mag.id }}" class="btn btn-outline btn-sm">
+        <i class="fas fa-certificate"></i> Calibraciones
+        {% if equipo.magnitudes|selectattr('activa')|list|length > 1 %} — {{ mag.nombre }}{% endif %}
+      </a>
+      <a href="/verificaciones/historial/{{ mag.id }}" class="btn btn-outline btn-sm">
+        <i class="fas fa-check-double"></i> Verificaciones
+        {% if equipo.magnitudes|selectattr('activa')|list|length > 1 %} — {{ mag.nombre }}{% endif %}
+      </a>
+      {% endfor %}
+      <a href="/mantenimientos/equipo/{{ equipo.id }}" class="btn btn-outline btn-sm">
+        <i class="fas fa-wrench"></i> Mantenimientos
+      </a>
+
+      {% for mag in equipo.magnitudes if mag.activa and mag.calibraciones %}
+      <a href="/ilac/frecuencias/{{ mag.id }}" class="btn btn-outline btn-sm">
+        <i class="fas fa-clock-rotate-left"></i> Período cal.
+        {% if equipo.magnitudes|selectattr('activa')|list|length > 1 %} — {{ mag.nombre }}{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{# ── 3. DATOS DEL EQUIPO ─────────────────────────────────────────────────────#}
+<div class="grid-3 mb-4">
+  <div class="card">
+    <div class="card-header"><span class="card-title"><i class="fas fa-tag" style="color:var(--primary);margin-right:6px;"></i>Identificación</span></div>
+    <div class="card-body" style="padding:14px 18px;">
+      {% for lbl,val in [('Marca',equipo.marca),('Modelo',equipo.modelo),('N° Serie',equipo.numero_serie),('N° Inventario',equipo.numero_inventario),('Adquisición',equipo.fecha_adquisicion.strftime('%d/%m/%Y') if equipo.fecha_adquisicion else none)] %}
+      {% if val %}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px;">
+        <span style="color:var(--text-muted);">{{ lbl }}</span>
+        <strong>{{ val }}</strong>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title"><i class="fas fa-map-marker-alt" style="color:var(--primary);margin-right:6px;"></i>Ubicación</span></div>
+    <div class="card-body" style="padding:14px 18px;">
+      {% for lbl,val in [('Área',equipo.area),('Ubicación',equipo.ubicacion),('Responsable',equipo.responsable)] %}
+      {% if val %}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px;">
+        <span style="color:var(--text-muted);">{{ lbl }}</span>
+        <strong>{{ val }}</strong>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title"><i class="fas fa-toggle-on" style="color:var(--primary);margin-right:6px;"></i>Cambiar estado</span></div>
+    <div class="card-body" style="padding:14px 18px;">
+      {% if usuario_actual.rol != 'solo_lectura' %}
+      <form method="post" action="/equipos/{{ equipo.id }}/estado">
+        <div class="form-group">
+          <select name="nuevo_estado" class="form-control" style="font-size:13px;">
+            {% for e in estados %}
+            <option value="{{ e }}" {% if equipo.estado==e %}selected{% endif %}>{{ e.replace('_',' ').title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="text" name="motivo" class="form-control"
+                 placeholder="Motivo (opcional)" style="font-size:13px;">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm w-full">
+          <i class="fas fa-save"></i> Actualizar estado
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── 4. RESUMEN DE MAGNITUDES ────────────────────────────────────────────────#}
+{% if equipo.magnitudes %}
+<div class="card mb-4">
+  <div class="card-header">
+    <span class="card-title"><i class="fas fa-ruler-combined" style="color:var(--primary);margin-right:8px;"></i>Resumen de magnitudes</span>
+    <a href="/magnitudes/equipo/{{ equipo.id }}" class="btn btn-outline btn-sm">Ver todas</a>
+  </div>
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">
+      {% for mag in equipo.magnitudes %}
+      {% set cal_rec = mag.calibraciones[0] if mag.calibraciones else none %}
+      {% set plan = mag.plan_verificacion %}
+      {% set verifs = plan.verificaciones if plan else [] %}
+      {% set prox_verif = (verifs[0].fecha + (verifs[0].fecha.__class__(1900,1,1) - verifs[0].fecha.__class__(1900,1,1)))|string if verifs else none %}
+
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:{% if mag.activa %}var(--bg-card){% else %}var(--bg-inset){% endif %};{% if not mag.activa %}opacity:0.6;{% endif %}">
+        {# Nombre magnitud #}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+          <div>
+            <div style="font-size:14px;font-weight:800;color:var(--primary-dark);">{{ mag.nombre }}</div>
+            <div style="font-size:11px;color:var(--text-muted);">
+              {{ mag.unidad or '' }}{% if mag.rango_min is not none %} · {{ mag.rango_min }}–{{ mag.rango_max }}{% endif %}
+            </div>
+          </div>
+          <span class="badge {% if mag.activa %}badge-success{% else %}badge-secondary{% endif %}" style="font-size:10px;">
+            {{ 'Activa' if mag.activa else 'Inactiva' }}
+          </span>
+        </div>
+
+        {# EMP #}
+        {% if mag.emp_texto %}
+        <div style="background:var(--badge-eq-bg);border-radius:6px;padding:6px 10px;font-size:12px;margin-bottom:10px;">
+          <span style="color:var(--text-muted);">EMP:</span>
+          <strong style="color:var(--primary-dark);"> {{ mag.emp_texto }}</strong>
+        </div>
+        {% endif %}
+
+        {# Tres indicadores clave #}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+
+          {# Próxima calibración #}
+          <div style="text-align:center;padding:8px 4px;background:var(--bg-inset);border-radius:8px;">
+            <i class="fas fa-certificate" style="color:var(--primary);font-size:14px;display:block;margin-bottom:3px;"></i>
+            <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;margin-bottom:2px;">Próxima cal.</div>
+            {% if cal_rec and cal_rec.proxima_calibracion %}
+              {% set dc = (cal_rec.proxima_calibracion - hoy).days %}
+              <div style="font-size:11px;font-weight:700;color:{% if dc<0 %}var(--danger){% elif dc<=30 %}var(--warning){% else %}var(--success){% endif %};">
+                {{ cal_rec.proxima_calibracion.strftime('%d/%m/%y') }}
+              </div>
+              <div style="font-size:9px;color:{% if dc<0 %}var(--danger){% elif dc<=30 %}var(--warning){% else %}var(--text-muted){% endif %};">
+                {% if dc<0 %}Vencida{% elif dc==0 %}Hoy{% else %}{{ dc }}d{% endif %}
+              </div>
+            {% else %}
+              <div style="font-size:11px;color:var(--text-muted);">Sin programar</div>
+            {% endif %}
+          </div>
+
+          {# Verificaciones #}
+          <div style="text-align:center;padding:8px 4px;background:var(--bg-inset);border-radius:8px;">
+            <i class="fas fa-check-double" style="color:#16a34a;font-size:14px;display:block;margin-bottom:3px;"></i>
+            <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;margin-bottom:2px;">Verificación</div>
+            {% if plan and plan.activo and plan.frecuencia_meses %}
+              <div style="font-size:11px;font-weight:700;color:var(--primary-dark);">
+                Cada {{ plan.frecuencia_meses }}m
+              </div>
+              {% if verifs %}
+                <div style="font-size:9px;color:var(--text-muted);">
+                  Última: {{ verifs[0].fecha.strftime('%d/%m/%y') }}
+                </div>
+              {% else %}
+                <div style="font-size:9px;color:var(--warning);">Sin registros</div>
+              {% endif %}
+            {% elif plan and not plan.activo %}
+              <a href="/verificaciones/plan/{{ mag.id }}" style="font-size:10px;color:var(--warning);text-decoration:none;">
+                <i class="fas fa-file-alt"></i> Ver justificación
+              </a>
+            {% else %}
+              <a href="/verificaciones/plan/{{ mag.id }}" style="font-size:10px;color:var(--primary);text-decoration:none;">
+                Configurar
+              </a>
+            {% endif %}
+          </div>
+
+          {# Último mantenimiento #}
+          <div style="text-align:center;padding:8px 4px;background:var(--bg-inset);border-radius:8px;">
+            <i class="fas fa-wrench" style="color:#d97706;font-size:14px;display:block;margin-bottom:3px;"></i>
+            <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;margin-bottom:2px;">Último mant.</div>
+            {% set mants = equipo.mantenimientos|selectattr('fecha_fin')|list|sort(attribute='fecha_fin',reverse=True) %}
+            {% if mants %}
+            <div style="font-size:11px;font-weight:700;color:var(--primary-dark);">
+              {{ mants[0].fecha_fin.strftime('%d/%m/%y') }}
+            </div>
+            <div style="font-size:9px;color:var(--text-muted);">{{ mants[0].tipo.title() }}</div>
+            {% else %}
+            <div style="font-size:11px;color:var(--text-muted);">Sin registros</div>
+            {% endif %}
+          </div>
+
+        </div>
+
+        {# Acciones rápidas de la magnitud #}
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+          <a href="/calibraciones/magnitud/{{ mag.id }}" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px;">
+            <i class="fas fa-certificate"></i> Calibraciones
+          </a>
+          <a href="/verificaciones/historial/{{ mag.id }}" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px;">
+            <i class="fas fa-check-double"></i> Verificaciones
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── 5. HISTORIAL COMPLETO ───────────────────────────────────────────────────#}
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="fas fa-history" style="color:var(--primary);margin-right:8px;"></i>Historial completo del equipo</span>
+  </div>
+  {% if historial_eventos %}
+  <div style="overflow-x:auto;">
+    <table class="table" style="font-size:12px;">
+      <thead>
+        <tr>
+          <th style="width:105px;">Fecha</th>
+          <th style="width:130px;">Tipo</th>
+          <th>Detalle</th>
+          <th style="width:130px;">Resultado</th>
+          <th style="width:130px;">Realizado por</th>
+          <th style="width:60px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in historial_eventos %}
+        {# Color de fila según tipo y resultado #}
+        {% set es_critico = ev.resultado in ['no_aprobado','reprobado','fuera_de_uso'] %}
+        {% set tipo_cfg = {
+          'calibracion':  ('var(--primary)',  'badge-info',      'fa-certificate',    'rgba(59,130,246,0.05)'),
+          'verificacion': ('var(--success)',   'badge-success',   'fa-check-double',   'rgba(34,197,94,0.04)'),
+          'mantenimiento':('var(--warning)',   'badge-warning',   'fa-wrench',         'rgba(245,158,11,0.04)'),
+          'estado':       ('var(--text-muted)','badge-secondary', 'fa-toggle-on',      'transparent'),
+        }.get(ev.tipo, ('var(--text-muted)','badge-secondary','fa-circle','transparent')) %}
+
+        <tr style="border-left:3px solid {{ tipo_cfg[0] }};{% if es_critico %}background:rgba(239,68,68,0.05);{% else %}background:{{ tipo_cfg[3] }};{% endif %}">
+          {# Fecha — prominente #}
+          <td style="white-space:nowrap;">
+            <div style="font-size:13px;font-weight:800;color:var(--text-strong,var(--text));">
+              {{ ev.fecha.strftime('%d/%m/%Y') }}
+            </div>
+            <div style="font-size:10px;color:var(--text-muted);">{{ ev.fecha.strftime('%a') }}</div>
+          </td>
+          {# Badge de tipo #}
+          <td>
+            <span class="badge {{ tipo_cfg[1] }}" style="font-size:10px;padding:4px 10px;">
+              <i class="fas {{ tipo_cfg[2] }}" style="font-size:9px;"></i>
+              {% if ev.tipo == 'calibracion' %}Calibración
+              {% elif ev.tipo == 'verificacion' %}Verificación
+              {% elif ev.tipo == 'mantenimiento' %}Mantenimiento
+              {% elif ev.tipo == 'estado' %}Cambio estado{% endif %}
+            </span>
+          </td>
+          {# Descripción #}
+          <td style="color:var(--text);font-weight:{% if es_critico %}700{% else %}500{% endif %};">
+            {{ ev.descripcion }}
+          </td>
+          {# Resultado #}
+          <td>
+            {% if ev.resultado %}
+              {% set rc = {
+                'aprobado':'success','pendiente':'warning','no_aprobado':'danger',
+                'alerta':'warning','reprobado':'danger','completado':'success',
+                'programado':'secondary','operativo':'success',
+                'en_espera_calibracion':'warning','fuera_de_uso':'danger',
+                'en_mantenimiento':'warning','dado_de_baja':'secondary',
+                'en_calibracion':'info','periodo_actualizado':'info'
+              }.get(ev.resultado,'secondary') %}
+              <span class="badge badge-{{ rc }}" style="font-size:10px;">
+                {{ ev.resultado.replace('_',' ').title() }}
+              </span>
+            {% else %}<span style="color:var(--text-subtle);">—</span>{% endif %}
+          </td>
+          {# Realizado por #}
+          <td style="font-size:11px;color:var(--text-muted);">
+            {{ ev.realizado_por or '—' }}
+          </td>
+          {# Acción #}
+          <td>
+            {% if ev.link %}
+            <a href="{{ ev.link }}" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;">
+              Ver <i class="fas fa-arrow-right" style="font-size:9px;"></i>
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body" style="text-align:center;padding:36px;color:var(--text-muted);">
+    <i class="fas fa-history" style="font-size:32px;opacity:0.2;display:block;margin-bottom:10px;"></i>
+    <div style="font-size:13px;font-weight:600;">Sin eventos registrados aún</div>
+    <div style="font-size:12px;margin-top:4px;">Los registros aparecerán aquí conforme uses el sistema</div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

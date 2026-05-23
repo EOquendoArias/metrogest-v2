@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Listado general{% endblock %}
+{% block page_title %}Listado general de equipos{% endblock %}
+
+{% block topbar_actions %}
+<a href="/auditoria/pdf" class="btn btn-outline btn-sm" target="_blank"><i class="fas fa-file-pdf"></i> PDF</a>
+<a href="/auditoria/excel" class="btn btn-outline btn-sm"><i class="fas fa-file-excel"></i> Excel</a>
+<a href="/equipos/" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Equipos</a>
+{% endblock %}
+
+{% block content %}
+
+{# ── Tarjetas de resumen ───────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;">
+
+  <div class="card"><div class="card-body" style="text-align:center;padding:18px 12px;">
+    <div style="font-size:34px;font-weight:800;color:var(--danger);">{{ vencidos }}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Cal. vencidas</div>
+  </div></div>
+
+  <div class="card"><div class="card-body" style="text-align:center;padding:18px 12px;">
+    <div style="font-size:34px;font-weight:800;color:var(--warning);">{{ criticos }}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Cal. próximas ≤30d</div>
+  </div></div>
+
+  <div class="card"><div class="card-body" style="text-align:center;padding:18px 12px;">
+    <div style="font-size:34px;font-weight:800;color:var(--primary);">{{ total }}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Equipos en seguimiento</div>
+  </div></div>
+
+  <div class="card"><div class="card-body" style="text-align:center;padding:18px 12px;">
+    <div style="font-size:34px;font-weight:800;color:var(--danger);">{{ verif_vencidas }}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Verif. vencidas</div>
+  </div></div>
+
+  <div class="card"><div class="card-body" style="text-align:center;padding:18px 12px;">
+    <div style="font-size:34px;font-weight:800;color:var(--warning);">{{ verif_pendientes_30 }}</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Verif. próximas ≤30d</div>
+  </div></div>
+
+</div>
+
+{# ── Tabla principal ───────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">
+      <i class="fas fa-clipboard-check" style="color:var(--primary);margin-right:8px;"></i>
+      Estado de todos los equipos
+    </span>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="table" style="font-size:12px;">
+      <thead>
+        <tr>
+          <th>Equipo</th>
+          <th>Estado</th>
+          <th>Magnitudes</th>
+          <th>Última cal.</th>
+          <th>Próxima cal.</th>
+          <th>Días cal.</th>
+          <th>Próxima verif.</th>
+          <th>V. estado</th>
+          <th>Último mant.</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in datos %}
+        {% set eq = d.equipo %}
+        <tr style="{% if d.dias_cal is not none and d.dias_cal < 0 %}background:var(--sem-fail-bg);{% elif d.dias_cal is not none and d.dias_cal <= 30 %}background:var(--info-amber-bg);{% endif %}">
+          <td>
+            <div style="font-weight:700;color:var(--primary-dark);">{{ eq.nombre }}</div>
+            <div style="font-size:11px;color:var(--text-muted);">{{ eq.codigo }}</div>
+          </td>
+          <td>
+            {% set ec = {'operativo':'success','en_espera_calibracion':'warning','en_calibracion':'info','en_mantenimiento':'warning','fuera_de_uso':'danger'}.get(eq.estado,'secondary') %}
+            <span class="badge badge-{{ ec }}" style="font-size:10px;">{{ eq.estado.replace('_',' ').title() }}</span>
+          </td>
+          <td style="text-align:center;">{{ eq.magnitudes|selectattr('activa')|list|length }}/{{ eq.magnitudes|length }}</td>
+          <td>{{ d.ultima_cal.strftime('%d/%m/%Y') if d.ultima_cal else '—' }}</td>
+          <td>
+            {% if d.proxima_cal %}
+            <span style="font-weight:{% if d.dias_cal is not none and d.dias_cal <= 30 %}700{% else %}400{% endif %};">
+              {{ d.proxima_cal.strftime('%d/%m/%Y') }}
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if d.dias_cal is not none %}
+            <span style="font-weight:700;color:{% if d.dias_cal < 0 %}var(--danger){% elif d.dias_cal <= 30 %}var(--warning){% else %}var(--success){% endif %};">
+              {% if d.dias_cal < 0 %}Vencida {{ d.dias_cal|abs }}d
+              {% elif d.dias_cal == 0 %}Hoy
+              {% else %}{{ d.dias_cal }}d{% endif %}
+            </span>
+            {% else %}<span style="color:var(--text-muted);">Sin programar</span>{% endif %}
+          </td>
+          <td style="font-size:11px;">
+            {% if d.verif_proxima %}
+              {{ d.verif_proxima.strftime('%d/%m/%Y') }}
+            {% elif d.verif_estado == 'sin_plan' %}
+              <span style="color:var(--text-muted);">Sin plan</span>
+            {% elif d.verif_estado == 'no_aplica' %}
+              <span style="color:var(--text-muted);">No aplica</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if d.verif_estado == 'vencida' %}
+              <span class="badge badge-danger" style="font-size:10px;">Vencida</span>
+            {% elif d.verif_estado == 'pendiente' %}
+              <span class="badge badge-warning" style="font-size:10px;">Pendiente</span>
+            {% elif d.verif_estado == 'al_dia' %}
+              <span class="badge badge-success" style="font-size:10px;">Al día</span>
+            {% elif d.verif_estado == 'sin_plan' %}
+              <span class="badge badge-neutral" style="font-size:10px;">Sin plan</span>
+            {% elif d.verif_estado == 'no_aplica' %}
+              <span class="badge badge-secondary" style="font-size:10px;">No aplica</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:11px;color:var(--text-muted);">{{ d.ultimo_mant.strftime('%d/%m/%Y') if d.ultimo_mant else '—' }}</td>
+          <td>
+            <a href="/equipos/{{ eq.id }}" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;">Ver</a>
+            <a href="/magnitudes/equipo/{{ eq.id }}" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;">Magnitudes</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

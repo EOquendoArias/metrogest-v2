@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+{% block title %}Calendario — MetroGest{% endblock %}
+{% block page_title %}Calendario de actividades{% endblock %}
+{% block breadcrumb %}{{ nombre_mes }} {{ año }} · {{ total_mes }} actividad(es){% endblock %}
+
+{% block extra_styles %}
+<style>
+/* ── Layout ──────────────────────────────────────────────────────────── */
+.cal-wrap { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+
+/* ── Cabecera días semana ─────────────────────────────────────────────── */
+.cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; }
+.cal-dow {
+  text-align: center; font-size: 10px; font-weight: 800;
+  color: var(--text-muted); padding: 6px 4px;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+
+/* ── Celda de día ────────────────────────────────────────────────────── */
+.cal-dia {
+  min-height: 120px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 6px 6px;
+  position: relative;
+  transition: border-color 0.15s;
+}
+.cal-dia:hover { border-color: var(--primary-light); }
+.cal-dia.vacio { background: var(--bg-inset); border-color: var(--border-light); opacity: 0.5; }
+.cal-dia.hoy {
+  border-color: var(--primary);
+  border-width: 2px;
+  background: var(--info-blue-bg, rgba(59,130,246,0.06));
+}
+
+/* Número del día */
+.cal-num {
+  font-size: 13px; font-weight: 800;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  line-height: 1;
+}
+.cal-dia.hoy .cal-num {
+  color: var(--primary);
+  background: var(--primary);
+  color: white;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+}
+
+/* ── Evento en celda ─────────────────────────────────────────────────── */
+.cal-act {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  margin-bottom: 3px;
+  font-size: 10px; font-weight: 700;
+  color: white;
+  text-decoration: none;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1.3;
+  transition: filter 0.15s, transform 0.12s;
+  cursor: pointer;
+}
+.cal-act:hover { filter: brightness(1.15); transform: translateX(1px); }
+.cal-act i { flex-shrink: 0; font-size: 9px; }
+.cal-act-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-act-codigo { font-size: 9px; opacity: 0.82; font-weight: 600; }
+
+/* Colores por tipo */
+.act-calibracion  { background: var(--primary, #1a4f8a); }
+.act-verificacion { background: var(--success, #16a34a); }
+.act-mantenimiento{ background: var(--warning, #d97706); }
+
+/* Vencida → borde izquierdo rojo + tono más oscuro */
+.cal-act.vencida {
+  background: var(--danger, #dc2626) !important;
+  box-shadow: inset 2px 0 0 rgba(255,255,255,0.35);
+}
+
+/* Más actividades */
+.cal-mas {
+  font-size: 9px; font-weight: 700;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  background: var(--bg-inset);
+  border-radius: 4px;
+  cursor: default;
+}
+
+/* ── Leyenda ─────────────────────────────────────────────────────────── */
+.cal-legend {
+  display: flex; gap: 14px; margin-bottom: 12px; flex-wrap: wrap;
+  align-items: center;
+}
+.legend-dot {
+  width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+}
+
+/* ── Panel lateral — actividades ─────────────────────────────────────── */
+.act-card {
+  display: flex; flex-direction: column; gap: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.act-card:hover { border-color: var(--primary-light); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+.act-card:last-child { margin-bottom: 0; }
+
+.act-card-stripe { height: 4px; width: 100%; flex-shrink: 0; }
+.act-card-body { padding: 11px 13px; display: flex; gap: 10px; align-items: flex-start; }
+.act-card-icon {
+  width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.act-card-info { flex: 1; min-width: 0; }
+.act-card-nombre {
+  font-size: 12px; font-weight: 800;
+  color: var(--text-strong, var(--text));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.act-card-codigo {
+  font-size: 10px; color: var(--text-muted);
+  font-weight: 600; margin-top: 1px;
+}
+.act-card-detalle {
+  font-size: 11px; color: var(--text-muted);
+  margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.act-card-fecha { flex-shrink: 0; text-align: right; }
+.dias-pill {
+  display: inline-block;
+  padding: 3px 9px; border-radius: 20px;
+  font-size: 11px; font-weight: 800;
+  white-space: nowrap;
+}
+.dias-vencida  { background: rgba(239,68,68,0.15);  color: var(--danger); }
+.dias-urgente  { background: rgba(245,158,11,0.18); color: var(--warning); }
+.dias-pronto   { background: rgba(245,158,11,0.10); color: var(--warning); }
+.dias-ok       { background: rgba(34,197,94,0.10);  color: var(--success); }
+
+/* Alerta de vencidos */
+.cal-alert {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 8px; padding: 10px 14px;
+  margin-bottom: 12px; font-size: 12px; font-weight: 600;
+  color: var(--danger);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Alerta si hay vencidas ───────────────────────────────────────────── #}
+{% if vencidas_count > 0 %}
+<div class="cal-alert">
+  <i class="fas fa-circle-exclamation" style="font-size:16px;flex-shrink:0;"></i>
+  <span>{{ vencidas_count }} actividad(es) vencida(s) — requieren atención inmediata</span>
+  <span style="margin-left:auto;font-size:11px;opacity:0.7;">Se muestran en rojo en el calendario</span>
+</div>
+{% endif %}
+
+<div class="cal-wrap">
+
+  {# ── Bloque izquierdo: navegación + leyenda + grid ──────────────────── #}
+  <div>
+
+    {# Navegación de mes #}
+    <div class="card mb-4">
+      <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;">
+        <a href="/calendario/?año={{ mes_anterior.year }}&mes={{ mes_anterior.month }}" class="btn btn-outline btn-sm">
+          <i class="fas fa-chevron-left"></i> {{ mes_anterior.strftime('%b %Y') }}
+        </a>
+        <div style="text-align:center;">
+          <div style="font-size:22px;font-weight:900;color:var(--primary);">{{ nombre_mes }}</div>
+          <div style="font-size:12px;color:var(--text-muted);">{{ año }} · <strong>{{ total_mes }}</strong> actividad(es)</div>
+        </div>
+        <a href="/calendario/?año={{ mes_siguiente.year }}&mes={{ mes_siguiente.month }}" class="btn btn-outline btn-sm">
+          {{ mes_siguiente.strftime('%b %Y') }} <i class="fas fa-chevron-right"></i>
+        </a>
+      </div>
+    </div>
+
+    {# Leyenda #}
+    <div class="cal-legend">
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--text-muted);">
+        <div class="legend-dot" style="background:var(--primary);"></div> Calibración
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--text-muted);">
+        <div class="legend-dot" style="background:var(--success);"></div> Verificación
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--text-muted);">
+        <div class="legend-dot" style="background:var(--warning);"></div> Mantenimiento
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--text-muted);">
+        <div class="legend-dot" style="background:var(--danger);"></div> Vencida
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--text-muted);">
+        <div class="legend-dot" style="background:var(--info-blue-bg,rgba(59,130,246,0.15));border:2px solid var(--primary);"></div> Hoy
+      </div>
+    </div>
+
+    {# Grid del calendario #}
+    <div class="cal-grid">
+      {% for dia_nom in ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'] %}
+      <div class="cal-dow">{{ dia_nom }}</div>
+      {% endfor %}
+
+      {% for semana in semanas %}
+        {% for d in semana %}
+        {% if d.dia is none %}
+          <div class="cal-dia vacio"></div>
+        {% else %}
+          <div class="cal-dia {% if d.fecha == hoy %}hoy{% endif %}">
+
+            {# Número del día #}
+            <div class="cal-num">{{ d.dia }}</div>
+
+            {# Máx 3 eventos visibles #}
+            {% for act in d.actividades[:3] %}
+            <a href="/equipos/{{ act.equipo_id }}"
+               class="cal-act act-{{ act.tipo }}{% if act.vencida %} vencida{% endif %}"
+               title="{{ act.codigo }} — {{ act.titulo }} | {{ act.detalle }}"
+               onclick="event.stopPropagation()">
+              <i class="fas {{ act.icono }}"></i>
+              <span class="cal-act-text">
+                <span class="cal-act-codigo">{{ act.codigo }}</span>
+              </span>
+            </a>
+            {% endfor %}
+
+            {# +N más #}
+            {% if d.actividades|length > 3 %}
+            <div class="cal-mas">+{{ d.actividades|length - 3 }} más</div>
+            {% endif %}
+
+          </div>
+        {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </div>
+
+  </div>
+
+  {# ── Panel lateral: próximas + vencidas ──────────────────────────────── #}
+  <div style="position:sticky;top:72px;">
+    <div class="card" style="overflow:hidden;">
+      <div class="card-header" style="padding:14px 16px;">
+        <span class="card-title" style="font-size:13px;">
+          <i class="fas fa-list-check" style="color:var(--primary);margin-right:8px;"></i>
+          Agenda operativa
+        </span>
+        <span style="font-size:11px;color:var(--text-muted);">próx. 60 días</span>
+      </div>
+      <div class="card-body" style="padding:12px;max-height:calc(100vh - 200px);overflow-y:auto;">
+
+        {% if proximas %}
+          {% set ns = namespace(vencidas_shown=false, proximas_shown=false) %}
+
+          {% for act in proximas %}
+            {% set dias = act.dias %}
+
+            {# Separador sección vencidas #}
+            {% if act.vencida and not ns.vencidas_shown %}
+              {% set ns.vencidas_shown = true %}
+              <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--danger);padding:4px 2px 8px;">
+                <i class="fas fa-circle-xmark"></i> Vencidas
+              </div>
+            {% endif %}
+            {# Separador sección próximas #}
+            {% if not act.vencida and not ns.proximas_shown %}
+              {% set ns.proximas_shown = true %}
+              {% if ns.vencidas_shown %}<div style="border-top:1px solid var(--border);margin:10px 0 10px;"></div>{% endif %}
+              <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);padding:4px 2px 8px;">
+                <i class="fas fa-clock"></i> Próximas
+              </div>
+            {% endif %}
+
+            {# Color de tipo #}
+            {% if act.tipo == 'calibracion' %}
+              {% set tipo_color = 'var(--primary)' %}
+              {% set tipo_icon_bg = 'rgba(59,130,246,0.12)' %}
+              {% set tipo_label = 'Calibración' %}
+            {% elif act.tipo == 'verificacion' %}
+              {% set tipo_color = 'var(--success)' %}
+              {% set tipo_icon_bg = 'rgba(34,197,94,0.12)' %}
+              {% set tipo_label = 'Verificación' %}
+            {% else %}
+              {% set tipo_color = 'var(--warning)' %}
+              {% set tipo_icon_bg = 'rgba(245,158,11,0.12)' %}
+              {% set tipo_label = 'Mantenimiento' %}
+            {% endif %}
+
+            {# Si está vencida, forzar rojo #}
+            {% if act.vencida %}
+              {% set tipo_color = 'var(--danger)' %}
+              {% set tipo_icon_bg = 'rgba(239,68,68,0.12)' %}
+            {% endif %}
+
+            <a href="/equipos/{{ act.equipo_id }}" class="act-card" style="text-decoration:none;">
+              <div class="act-card-stripe" style="background:{{ tipo_color }};"></div>
+              <div class="act-card-body">
+
+                {# Ícono tipo #}
+                <div class="act-card-icon" style="background:{{ tipo_icon_bg }};color:{{ tipo_color }};">
+                  <i class="fas {{ act.icono }}"></i>
+                </div>
+
+                {# Información #}
+                <div class="act-card-info">
+                  <div class="act-card-nombre">{{ act.titulo }}</div>
+                  <div class="act-card-codigo">
+                    <i class="fas fa-tag" style="font-size:8px;"></i> {{ act.codigo }}
+                    <span style="margin-left:4px;font-size:9px;background:{{ tipo_icon_bg }};color:{{ tipo_color }};padding:1px 6px;border-radius:10px;">{{ tipo_label }}</span>
+                  </div>
+                  <div class="act-card-detalle">{{ act.detalle }}</div>
+                </div>
+
+                {# Días #}
+                <div class="act-card-fecha">
+                  <div class="dias-pill {% if dias < 0 %}dias-vencida{% elif dias <= 7 %}dias-urgente{% elif dias <= 30 %}dias-pronto{% else %}dias-ok{% endif %}">
+                    {% if dias < 0 %}
+                      <i class="fas fa-exclamation" style="font-size:9px;"></i> {{ dias|abs }}d
+                    {% elif dias == 0 %}
+                      Hoy
+                    {% elif dias == 1 %}
+                      Mañana
+                    {% else %}
+                      {{ dias }}d
+                    {% endif %}
+                  </div>
+                  <div style="font-size:9px;color:var(--text-muted);margin-top:4px;text-align:right;">
+                    {{ act.fecha.strftime('%d/%m/%y') }}
+                  </div>
+                </div>
+
+              </div>
+            </a>
+
+          {% endfor %}
+
+        {% else %}
+          <div style="text-align:center;padding:40px 20px;color:var(--text-muted);">
+            <i class="fas fa-calendar-check" style="font-size:36px;opacity:0.2;display:block;margin-bottom:12px;"></i>
+            <div style="font-size:13px;font-weight:600;">Sin actividades en los próximos 60 días</div>
+            <div style="font-size:11px;margin-top:4px;">Todo al día ✓</div>
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+    {# Botón volver a hoy #}
+    <div style="margin-top:10px;">
+      <a href="/calendario/" class="btn btn-outline btn-sm w-full">
+        <i class="fas fa-calendar-day"></i> Ir al mes actual
+      </a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

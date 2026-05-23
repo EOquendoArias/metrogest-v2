@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Configuración del laboratorio{% endblock %}
+{% block page_title %}Configuración del laboratorio{% endblock %}
+{% block breadcrumb %}Documentos controlados · encabezado PDF{% endblock %}
+
+{% block content %}
+{% if ok %}
+<div class="alert alert-success"><i class="fas fa-check-circle"></i> Configuración guardada correctamente.</div>
+{% endif %}
+
+<form method="post" action="/config-lab/guardar" enctype="multipart/form-data">
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-building"></i> Datos de la empresa</div>
+    <div style="display:flex;gap:20px;align-items:flex-start;margin-bottom:16px;">
+      {% if config.logo_path %}
+      <div>
+        <img src="{{ config.logo_path }}" style="height:80px;max-width:200px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:8px;">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Logo actual</div>
+      </div>
+      {% endif %}
+      <div class="form-group" style="flex:1;margin:0;">
+        <label class="form-label">Logo del laboratorio (PNG, JPG)</label>
+        <input type="file" name="logo" class="form-control" accept=".png,.jpg,.jpeg,.svg">
+        <div class="form-hint">Aparecerá en el encabezado de todos los documentos PDF</div>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Nombre del laboratorio <span class="req">*</span></label>
+        <input type="text" name="nombre" class="form-control" required value="{{ config.nombre }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Razón social</label>
+        <input type="text" name="razon_social" class="form-control" value="{{ config.razon_social or '' }}">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Dirección</label>
+        <input type="text" name="direccion" class="form-control" value="{{ config.direccion or '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ciudad</label>
+        <input type="text" name="ciudad" class="form-control" value="{{ config.ciudad or '' }}">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Teléfono</label>
+        <input type="text" name="telefono" class="form-control" value="{{ config.telefono or '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Correo electrónico</label>
+        <input type="email" name="email" class="form-control" value="{{ config.email or '' }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-file-alt"></i> Control de documentos</div>
+    <div class="infobox infobox-blue">
+      <i class="fas fa-info-circle"></i> Cada tipo de documento tiene su propio código, versión y fecha de aprobación. Estos datos aparecen en el encabezado de cada PDF generado.
+    </div>
+    <table class="table" style="font-size:13px;">
+      <thead>
+        <tr><th>Documento</th><th>Código del formato</th><th>Versión</th></tr>
+      </thead>
+      <tbody>
+        {% for doc, cod_field, ver_field, cod_val, ver_val in [
+          ('Análisis de calibración', 'codigo_formato_analisis', 'version_analisis', config.codigo_formato_analisis, config.version_analisis),
+          ('Verificación intermedia', 'codigo_formato_verificacion', 'version_verificacion', config.codigo_formato_verificacion, config.version_verificacion),
+          ('Registro de mantenimiento', 'codigo_formato_mantenimiento', 'version_mantenimiento', config.codigo_formato_mantenimiento, config.version_mantenimiento),
+          ('Acta de baja de equipo', 'codigo_formato_baja', 'version_baja', config.codigo_formato_baja, config.version_baja),
+          ('Resumen para auditoría', 'codigo_formato_auditoria', 'version_auditoria', config.codigo_formato_auditoria, config.version_auditoria),
+        ] %}
+        <tr>
+          <td style="font-weight:600;">{{ doc }}</td>
+          <td><input type="text" name="{{ cod_field }}" class="form-control" value="{{ cod_val }}" style="max-width:160px;"></td>
+          <td><input type="text" name="{{ ver_field }}" class="form-control" value="{{ ver_val }}" style="max-width:80px;"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-signature"></i> Responsables de aprobación de documentos</div>
+    <div class="form-grid-3">
+      <div class="form-group">
+        <label class="form-label">Elaborado por</label>
+        <input type="text" name="elaborado_por" class="form-control" value="{{ config.elaborado_por or '' }}" placeholder="Nombre y cargo">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Revisado por</label>
+        <input type="text" name="revisado_por" class="form-control" value="{{ config.revisado_por or '' }}" placeholder="Nombre y cargo">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Aprobado por</label>
+        <input type="text" name="aprobado_por" class="form-control" value="{{ config.aprobado_por or '' }}" placeholder="Nombre y cargo">
+      </div>
+    </div>
+  </div>
+
+  <!-- Vista previa del encabezado -->
+  <div class="form-section">
+    <div class="form-section-title"><i class="fas fa-eye"></i> Vista previa del encabezado de documentos</div>
+    <div style="border:2px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg-card);">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <tr>
+          <td style="width:25%;padding:12px;border-right:1px solid var(--border);text-align:center;vertical-align:middle;">
+            {% if config.logo_path %}
+            <img src="{{ config.logo_path }}" style="max-height:60px;max-width:140px;object-fit:contain;">
+            {% else %}
+            <div style="width:100px;height:50px;background:var(--bg-inset);border-radius:4px;display:flex;align-items:center;justify-content:center;margin:auto;font-size:10px;color:var(--text-muted);">LOGO</div>
+            {% endif %}
+          </td>
+          <td style="padding:12px;border-right:1px solid var(--border);text-align:center;vertical-align:middle;">
+            <div style="font-size:14px;font-weight:700;color:#1a4f8a;">{{ config.nombre }}</div>
+            <div style="font-size:11px;color:#64748b;margin-top:4px;">ANÁLISIS DE RESULTADOS DE CALIBRACIÓN</div>
+          </td>
+          <td style="width:30%;padding:8px;vertical-align:top;font-size:10px;">
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td style="padding:2px 4px;border:0.5px solid #e2e8f0;font-weight:600;">Código:</td><td style="padding:2px 4px;border:0.5px solid #e2e8f0;">{{ config.codigo_formato_analisis }}</td></tr>
+              <tr><td style="padding:2px 4px;border:0.5px solid #e2e8f0;font-weight:600;">Versión:</td><td style="padding:2px 4px;border:0.5px solid #e2e8f0;">{{ config.version_analisis }}</td></tr>
+              <tr><td style="padding:2px 4px;border:0.5px solid #e2e8f0;font-weight:600;">Fecha:</td><td style="padding:2px 4px;border:0.5px solid #e2e8f0;">{{ hoy.strftime('%d/%m/%Y') if hoy else '' }}</td></tr>
+              <tr><td style="padding:2px 4px;border:0.5px solid #e2e8f0;font-weight:600;">Página:</td><td style="padding:2px 4px;border:0.5px solid #e2e8f0;">1 de N</td></tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;">
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar configuración</button>
+  </div>
+</form>
+{% endblock %}
