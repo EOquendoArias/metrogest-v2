@@ -10,3 +10,6 @@ python-dateutil
 numpy
 matplotlib
 reportlab
+python-dotenv
+psycopg2-binary
+alembic
