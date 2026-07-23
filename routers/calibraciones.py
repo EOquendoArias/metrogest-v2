@@ -43,7 +43,7 @@ async def crear(mid: int, request: Request,
     certificado: UploadFile = File(None), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/calibraciones/magnitud/{mid}")
+        return RedirectResponse(url=f"/calibraciones/magnitud/{mid}", status_code=303)
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id==mid).first()
     if not mag: raise HTTPException(status_code=404)
     cert_path = None

@@ -37,7 +37,8 @@ def crear(eid: int, request: Request,
     umbral_alerta_pct: float = Form(70.0), umbral_fuera_pct: float = Form(100.0),
     notas: str = Form(""), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
-    if not u or u.rol == "solo_lectura": return RedirectResponse(url=f"/magnitudes/equipo/{eid}")
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/magnitudes/equipo/{eid}", status_code=303)
     orden = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.equipo_id==eid).count()+1
     db.add(models.MagnitudEquipo(
         equipo_id=eid, nombre=nombre, simbolo=simbolo or None, unidad=unidad or None,
@@ -69,7 +70,7 @@ def editar(mid: int, request: Request,
     umbral_alerta_pct: float = Form(70.0), umbral_fuera_pct: float = Form(100.0),
     notas: str = Form(""), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
-    if not u or u.rol == "solo_lectura": return RedirectResponse(url="/equipos/")
+    if not u or u.rol == "solo_lectura": return RedirectResponse(url="/equipos/", status_code=303)
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id==mid).first()
     if not mag: raise HTTPException(status_code=404)
     mag.nombre=nombre; mag.simbolo=simbolo or None; mag.unidad=unidad or None
@@ -86,7 +87,7 @@ def editar(mid: int, request: Request,
 @router.post("/{mid}/desactivar")
 def desactivar(mid: int, request: Request, motivo: str = Form(""), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
-    if not u or u.rol == "solo_lectura": return RedirectResponse(url="/equipos/")
+    if not u or u.rol == "solo_lectura": return RedirectResponse(url="/equipos/", status_code=303)
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id==mid).first()
     if not mag: raise HTTPException(status_code=404)
     eid = mag.equipo_id; mag.activa = not mag.activa

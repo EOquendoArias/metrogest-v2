@@ -48,7 +48,7 @@ async def crear(eid: int, request: Request,
     archivo: UploadFile = File(None), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/mantenimientos/equipo/{eid}")
+        return RedirectResponse(url=f"/mantenimientos/equipo/{eid}", status_code=303)
     ap = None
     if archivo and archivo.filename:
         n = f"static/certificados/mant_{uuid.uuid4()}"

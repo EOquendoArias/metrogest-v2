@@ -13,7 +13,7 @@ T = Jinja2Templates(directory="templates")
 @router.get("/", response_class=HTMLResponse)
 def config_page(request: Request, db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
-    if not u or u.rol != "administrador": return RedirectResponse(url="/equipos/")
+    if not u or u.rol != "administrador": return RedirectResponse(url="/equipos/", status_code=303)
     config = db.query(models.ConfigLaboratorio).first() or models.ConfigLaboratorio()
     return T.TemplateResponse(request, "config_lab/config.html",
         {"usuario_actual": u, "config": config, "ok": request.query_params.get("ok"), "hoy": date.today()})
@@ -33,7 +33,7 @@ async def guardar(request: Request,
     elaborado_por: str = Form(""), revisado_por: str = Form(""), aprobado_por: str = Form(""),
     logo: UploadFile = File(None), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
-    if not u or u.rol != "administrador": return RedirectResponse(url="/equipos/")
+    if not u or u.rol != "administrador": return RedirectResponse(url="/equipos/", status_code=303)
     c = db.query(models.ConfigLaboratorio).first()
     if not c: c = models.ConfigLaboratorio(); db.add(c)
     if logo and logo.filename:

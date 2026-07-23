@@ -68,9 +68,9 @@ def cambiar_password_inicial(request: Request,
                               db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u:
-        return RedirectResponse(url="/usuarios/login")
+        return RedirectResponse(url="/usuarios/login", status_code=303)
     if not u.debe_cambiar_password:
-        return RedirectResponse(url="/dashboard/")
+        return RedirectResponse(url="/dashboard/", status_code=303)
     if len(nueva_password) < 8:
         return T.TemplateResponse(request, "cambiar_password_inicial.html",
             {"error": "La contraseña debe tener al menos 8 caracteres."})
@@ -110,7 +110,7 @@ def crear_usuario(request: Request, nombre: str = Form(...),
                   rol: str = Form("operador"), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol != "administrador":
-        return RedirectResponse(url="/equipos/")
+        return RedirectResponse(url="/equipos/", status_code=303)
     if db.query(models.Usuario).filter(models.Usuario.email == email).first():
         return T.TemplateResponse(request, "usuarios/formulario.html",
                                    {"usuario_actual": u, "usuario": None,
@@ -126,7 +126,7 @@ def cambiar_password(uid: int, request: Request,
                      db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol != "administrador":
-        return RedirectResponse(url="/equipos/")
+        return RedirectResponse(url="/equipos/", status_code=303)
     usuario = db.query(models.Usuario).filter(models.Usuario.id == uid).first()
     if usuario:
         usuario.hashed_password = auth.hash_password(nueva_password)
@@ -137,7 +137,7 @@ def cambiar_password(uid: int, request: Request,
 def toggle_activo(uid: int, request: Request, db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol != "administrador":
-        return RedirectResponse(url="/equipos/")
+        return RedirectResponse(url="/equipos/", status_code=303)
     usuario = db.query(models.Usuario).filter(models.Usuario.id == uid).first()
     if usuario and usuario.id != u.id:  # No puede desactivarse a sí mismo
         usuario.activo = not usuario.activo

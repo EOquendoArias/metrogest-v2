@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: metrogest
+          POSTGRES_PASSWORD: metrogest_ci
+          POSTGRES_DB: metrogest_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U metrogest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # La app nunca corre contra esta URL — es la base de PRUEBA que la CI
+      # crea y destruye en cada corrida (ver services.postgres arriba).
+      TEST_DATABASE_URL: postgresql+psycopg2://metrogest:metrogest_ci@localhost:5432/metrogest_test
+      SESSION_SECRET: 0000000000000000000000000000000000000000000000000000000000000000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Correr pytest
+        run: pytest tests/ -v

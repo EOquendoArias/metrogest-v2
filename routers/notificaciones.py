@@ -49,7 +49,7 @@ async def guardar(
 ):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol != "administrador":
-        return RedirectResponse(url="/equipos/")
+        return RedirectResponse(url="/equipos/", status_code=303)
 
     cfg = _get_config(db)
     cfg.email_destinatario = email_destinatario.strip() or None

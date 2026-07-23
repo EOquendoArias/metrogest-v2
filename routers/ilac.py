@@ -55,7 +55,7 @@ def guardar_riesgo(mid: int, request: Request,
 
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/ilac/riesgo/{mid}")
+        return RedirectResponse(url=f"/ilac/riesgo/{mid}", status_code=303)
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
     if not mag: raise HTTPException(status_code=404)
 
@@ -183,7 +183,7 @@ def guardar_periodo(mid: int, request: Request,
     db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/ilac/periodo/{mid}")
+        return RedirectResponse(url=f"/ilac/periodo/{mid}", status_code=303)
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
     if not mag: raise HTTPException(status_code=404)
 

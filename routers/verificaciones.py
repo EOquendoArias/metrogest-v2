@@ -41,7 +41,7 @@ def guardar_plan(mid: int, request: Request,
     db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/verificaciones/plan/{mid}")
+        return RedirectResponse(url=f"/verificaciones/plan/{mid}", status_code=303)
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id==mid).first()
     if not mag: raise HTTPException(status_code=404)
     plan = db.query(models.PlanVerificacion).filter(models.PlanVerificacion.magnitud_id==mid).first()
@@ -129,7 +129,7 @@ async def crear(mid: int, request: Request,
     db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/verificaciones/nueva/{mid}")
+        return RedirectResponse(url=f"/verificaciones/nueva/{mid}", status_code=303)
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id==mid).first()
     plan = db.query(models.PlanVerificacion).filter(models.PlanVerificacion.magnitud_id==mid).first()
     if not mag or not plan: raise HTTPException(status_code=404)
@@ -168,7 +168,7 @@ def agregar_punto(vid: int, request: Request,
     observacion: str = Form(""), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/verificaciones/{vid}/puntos")
+        return RedirectResponse(url=f"/verificaciones/{vid}/puntos", status_code=303)
     ver = db.query(models.VerificacionIntermedia).filter(models.VerificacionIntermedia.id==vid).first()
     if not ver: raise HTTPException(status_code=404)
     err = round(valor_indicado - valor_patron, 8)
@@ -203,7 +203,7 @@ def cerrar(vid: int, request: Request,
     password: str = Form(""), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/verificaciones/{vid}/puntos")
+        return RedirectResponse(url=f"/verificaciones/{vid}/puntos", status_code=303)
     ver = db.query(models.VerificacionIntermedia).filter(models.VerificacionIntermedia.id==vid).first()
     if ver:
         ok, error = firma.verificar_y_firmar(db, request, u, password,
@@ -214,13 +214,13 @@ def cerrar(vid: int, request: Request,
         if observaciones: ver.observaciones=observaciones
         db.commit()
         return RedirectResponse(url=f"/verificaciones/historial/{ver.magnitud_id}", status_code=302)
-    return RedirectResponse(url="/equipos/")
+    return RedirectResponse(url="/equipos/", status_code=303)
 
 @router.post("/{vid}/punto/{pid}/eliminar")
 def eliminar_punto(vid: int, pid: int, request: Request, db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/verificaciones/{vid}/puntos")
+        return RedirectResponse(url=f"/verificaciones/{vid}/puntos", status_code=303)
     p = db.query(models.PuntoVerificacion).filter(
         models.PuntoVerificacion.id==pid,
         models.PuntoVerificacion.eliminado==False).first()

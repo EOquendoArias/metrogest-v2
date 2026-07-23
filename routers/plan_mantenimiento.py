@@ -79,7 +79,7 @@ def guardar_plan(eid: int, request: Request,
 
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
-        return RedirectResponse(url=f"/plan-mantenimiento/equipo/{eid}")
+        return RedirectResponse(url=f"/plan-mantenimiento/equipo/{eid}", status_code=303)
     eq = db.query(models.Equipo).filter(models.Equipo.id == eid).first()
     if not eq:
         raise HTTPException(status_code=404)

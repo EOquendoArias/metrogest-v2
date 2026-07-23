@@ -14,7 +14,7 @@ import json
 from contextvars import ContextVar
 from datetime import date, datetime
 
-from sqlalchemy import event, inspect
+from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session
 
 # Tabla -> columnas que se ocultan en el rastro (nunca se guarda el valor real)
@@ -66,6 +66,24 @@ def _fila_a_dict(obj) -> dict:
     }
 
 
+def _valor_anterior_desde_bd(session, obj, campo):
+    """
+    Cuando el atributo estaba "expirado" (ej. el objeto se cargó, se hizo
+    commit de otra cosa en la misma sesión, y luego se reasignó este campo
+    sin leerlo primero), SQLAlchemy ya no sabe cuál era el valor viejo:
+    hist.deleted queda vacío aunque sí hubo un cambio real. Se consulta la
+    fila tal como sigue en la BD ahora mismo — este código corre en
+    before_flush, antes de que el UPDATE de este mismo flush se emita, así
+    que la BD todavía tiene el valor previo.
+    """
+    tabla = obj.__table__
+    pk_col = list(tabla.primary_key.columns)[0]
+    fila = session.connection().execute(
+        select(tabla.c[campo]).where(pk_col == obj.id)
+    ).first()
+    return fila[0] if fila else None
+
+
 def _registrar_modificaciones(session, obj):
     from models import RegistroAuditoria
 
@@ -79,8 +97,11 @@ def _registrar_modificaciones(session, obj):
         hist = estado.attrs[campo].history
         if not hist.has_changes():
             continue
-        anterior = hist.deleted[0] if hist.deleted else None
         nuevo = hist.added[0] if hist.added else None
+        if hist.deleted:
+            anterior = hist.deleted[0]
+        else:
+            anterior = _valor_anterior_desde_bd(session, obj, campo)
         if anterior == nuevo:
             continue
         session.add(RegistroAuditoria(
