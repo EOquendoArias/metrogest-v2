@@ -161,6 +161,34 @@ def puntos_page(vid: int, request: Request, db: Session = Depends(get_db)):
         "error_firma": request.query_params.get("error_firma"),
         "significado_cerrar": firma.SIGNIFICADOS["cerrar_verificacion"]})
 
+def _construir_punto_verificacion(ver, numero_punto, valor_patron, valor_indicado,
+                                   tolerancia_inf, tolerancia_sup, observacion):
+    """Misma lógica de cálculo (error, desviación %, resultado ok/alerta/fuera)
+    que usa tanto agregar un punto solo como el lote."""
+    err = round(valor_indicado - valor_patron, 8)
+    emp = ver.magnitud.emp_valor if ver.magnitud else None
+    ti = float(tolerancia_inf) if tolerancia_inf else (-abs(emp) if emp else None)
+    ts = float(tolerancia_sup) if tolerancia_sup else (abs(emp) if emp else None)
+    desv = round(abs(err)/abs(emp)*100, 2) if emp else None
+    ua = ver.plan.umbral_alerta_pct if ver.plan else 70
+    uf = ver.plan.umbral_fuera_pct if ver.plan else 100
+    res = ("fuera" if desv and desv>=uf else "alerta" if desv and desv>=ua else "ok") if desv is not None else None
+    return models.PuntoVerificacion(verificacion_id=ver.id, numero_punto=numero_punto,
+        valor_patron=valor_patron, valor_indicado=valor_indicado, error=err,
+        tolerancia_inf=ti, tolerancia_sup=ts, desviacion_pct=desv,
+        resultado=res, observacion=observacion or None)
+
+
+def _recalcular_resultado_verificacion(db, ver):
+    pts = db.query(models.PuntoVerificacion).filter(
+        models.PuntoVerificacion.verificacion_id==ver.id,
+        models.PuntoVerificacion.eliminado==False).all()
+    rs = [p.resultado for p in pts if p.resultado]
+    ds = [p.desviacion_pct for p in pts if p.desviacion_pct is not None]
+    ver.max_desviacion_pct = max(ds) if ds else None
+    ver.resultado = "reprobado" if "fuera" in rs else "alerta" if "alerta" in rs else "aprobado" if rs else "pendiente"
+
+
 @router.post("/{vid}/punto")
 def agregar_punto(vid: int, request: Request,
     valor_patron: float = Form(...), valor_indicado: float = Form(...),
@@ -171,31 +199,51 @@ def agregar_punto(vid: int, request: Request,
         return RedirectResponse(url=f"/verificaciones/{vid}/puntos", status_code=303)
     ver = db.query(models.VerificacionIntermedia).filter(models.VerificacionIntermedia.id==vid).first()
     if not ver: raise HTTPException(status_code=404)
-    err = round(valor_indicado - valor_patron, 8)
-    emp = ver.magnitud.emp_valor if ver.magnitud else None
-    ti = float(tolerancia_inf) if tolerancia_inf else (-abs(emp) if emp else None)
-    ts = float(tolerancia_sup) if tolerancia_sup else (abs(emp) if emp else None)
-    desv = round(abs(err)/abs(emp)*100,2) if emp else None
-    ua = ver.plan.umbral_alerta_pct if ver.plan else 70
-    uf = ver.plan.umbral_fuera_pct if ver.plan else 100
-    res = ("fuera" if desv and desv>=uf else "alerta" if desv and desv>=ua else "ok") if desv is not None else None
     n = db.query(models.PuntoVerificacion).filter(
         models.PuntoVerificacion.verificacion_id==vid,
         models.PuntoVerificacion.eliminado==False).count()
-    db.add(models.PuntoVerificacion(verificacion_id=vid, numero_punto=n+1,
-        valor_patron=valor_patron, valor_indicado=valor_indicado, error=err,
-        tolerancia_inf=ti, tolerancia_sup=ts, desviacion_pct=desv,
-        resultado=res, observacion=observacion or None))
+    db.add(_construir_punto_verificacion(ver, n+1, valor_patron, valor_indicado,
+                                          tolerancia_inf, tolerancia_sup, observacion))
     db.flush()
-    pts = db.query(models.PuntoVerificacion).filter(
-        models.PuntoVerificacion.verificacion_id==vid,
-        models.PuntoVerificacion.eliminado==False).all()
-    rs = [p.resultado for p in pts if p.resultado]
-    ds = [p.desviacion_pct for p in pts if p.desviacion_pct is not None]
-    ver.max_desviacion_pct = max(ds) if ds else None
-    ver.resultado = "reprobado" if "fuera" in rs else "alerta" if "alerta" in rs else "aprobado" if rs else "pendiente"
+    _recalcular_resultado_verificacion(db, ver)
     db.commit()
     return RedirectResponse(url=f"/verificaciones/{vid}/puntos", status_code=302)
+
+
+@router.post("/{vid}/puntos/lote")
+def agregar_puntos_lote(vid: int, request: Request,
+    valor_patron: list[str] = Form([]), valor_indicado: list[str] = Form([]),
+    tolerancia_inf: list[str] = Form([]), tolerancia_sup: list[str] = Form([]),
+    observacion: list[str] = Form([]), db: Session = Depends(get_db)):
+    """Varias filas de puntos en un solo envío — mismo espíritu que el lote
+    de análisis de calibración."""
+    u = auth.obtener_usuario_actual(request, db)
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/verificaciones/{vid}/puntos", status_code=303)
+    ver = db.query(models.VerificacionIntermedia).filter(models.VerificacionIntermedia.id==vid).first()
+    if not ver: raise HTTPException(status_code=404)
+    n = db.query(models.PuntoVerificacion).filter(
+        models.PuntoVerificacion.verificacion_id==vid,
+        models.PuntoVerificacion.eliminado==False).count()
+
+    agregados = 0
+    for i in range(len(valor_patron)):
+        vp = (valor_patron[i] or "").strip()
+        vi = (valor_indicado[i] if i < len(valor_indicado) else "").strip()
+        if not vp or not vi:
+            continue
+        agregados += 1
+        db.add(_construir_punto_verificacion(
+            ver, n + agregados, float(vp), float(vi),
+            (tolerancia_inf[i] if i < len(tolerancia_inf) else "").strip(),
+            (tolerancia_sup[i] if i < len(tolerancia_sup) else "").strip(),
+            (observacion[i] if i < len(observacion) else "").strip(),
+        ))
+    if agregados:
+        db.flush()
+        _recalcular_resultado_verificacion(db, ver)
+        db.commit()
+    return RedirectResponse(url=f"/verificaciones/{vid}/puntos", status_code=303)
 
 @router.post("/{vid}/cerrar")
 def cerrar(vid: int, request: Request,

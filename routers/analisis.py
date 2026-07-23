@@ -136,7 +136,29 @@ def sel_metodo(cid: int, request: Request,
     return RedirectResponse(url=f"/analisis/{cid}", status_code=303)
 
 
-# ── AGREGAR PUNTO ─────────────────────────────────────────────────────────────
+# ── AGREGAR PUNTOS (en lote — una o varias filas en un solo envío) ────────────
+
+def _construir_punto(cal, numero_punto, valor_patron, valor_indicado,
+                      incertidumbre, tolerancia_inf, tolerancia_sup,
+                      emp_punto, observacion):
+    """Misma lógica de cálculo (error, EMP, tolerancias, semáforo) que usa
+    tanto agregar un punto solo como el lote — para no duplicarla."""
+    usar_u = cal.usar_incertidumbre if hasattr(cal, "usar_incertidumbre") else True
+    err   = round(valor_indicado - valor_patron, 8)
+    u_val = float(incertidumbre) if incertidumbre and usar_u else None
+    emp_p = float(emp_punto) if emp_punto else (cal.magnitud.emp_valor if cal.magnitud else None)
+    ti = float(tolerancia_inf) if tolerancia_inf else (-abs(emp_p) if emp_p else None)
+    ts = float(tolerancia_sup) if tolerancia_sup else (abs(emp_p) if emp_p else None)
+    dentro = calcular_semaforo(err, u_val, emp_p)
+    aeu = round(abs(err) + (u_val or 0), 8)
+    return models.PuntoCalibracion(
+        calibracion_id=cal.id, numero_punto=numero_punto,
+        valor_patron=valor_patron, valor_indicado=valor_indicado, error=err,
+        tolerancia_inf=ti, tolerancia_sup=ts,
+        incertidumbre=float(incertidumbre) if incertidumbre else None,
+        abs_error_mas_u=aeu, emp_punto=emp_p,
+        dentro_tolerancia=dentro, observacion=observacion or None)
+
 
 @router.post("/{cid}/punto")
 def agregar_punto(cid: int, request: Request,
@@ -150,26 +172,52 @@ def agregar_punto(cid: int, request: Request,
     cal = db.query(models.Calibracion).filter(models.Calibracion.id == cid).first()
     if not cal: raise HTTPException(status_code=404)
 
-    usar_u = cal.usar_incertidumbre if hasattr(cal, "usar_incertidumbre") else True
-    err   = round(valor_indicado - valor_patron, 8)
-    u_val = float(incertidumbre) if incertidumbre and usar_u else None
-    emp_p = float(emp_punto) if emp_punto else (cal.magnitud.emp_valor if cal.magnitud else None)
-    ti = float(tolerancia_inf) if tolerancia_inf else (-abs(emp_p) if emp_p else None)
-    ts = float(tolerancia_sup) if tolerancia_sup else (abs(emp_p) if emp_p else None)
-    dentro = calcular_semaforo(err, u_val, emp_p)
-    aeu = round(abs(err) + (u_val or 0), 8)
+    n = db.query(models.PuntoCalibracion).filter(
+        models.PuntoCalibracion.calibracion_id == cid,
+        models.PuntoCalibracion.eliminado == False).count()
+    db.add(_construir_punto(cal, n + 1, valor_patron, valor_indicado,
+                             incertidumbre, tolerancia_inf, tolerancia_sup,
+                             emp_punto, observacion))
+    db.commit()
+    return RedirectResponse(url=f"/analisis/{cid}", status_code=303)
+
+
+@router.post("/{cid}/puntos/lote")
+def agregar_puntos_lote(cid: int, request: Request,
+    valor_patron: list[str] = Form([]), valor_indicado: list[str] = Form([]),
+    incertidumbre: list[str] = Form([]), tolerancia_inf: list[str] = Form([]),
+    tolerancia_sup: list[str] = Form([]), emp_punto: list[str] = Form([]),
+    observacion: list[str] = Form([]), db: Session = Depends(get_db)):
+    """Varias filas de puntos en un solo envío — antes había que agregar los
+    puntos de a uno, con una recarga de página por cada uno (10-13 clics para
+    una calibración típica)."""
+    u = auth.obtener_usuario_actual(request, db)
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/analisis/{cid}", status_code=303)
+    cal = db.query(models.Calibracion).filter(models.Calibracion.id == cid).first()
+    if not cal: raise HTTPException(status_code=404)
 
     n = db.query(models.PuntoCalibracion).filter(
         models.PuntoCalibracion.calibracion_id == cid,
         models.PuntoCalibracion.eliminado == False).count()
-    db.add(models.PuntoCalibracion(
-        calibracion_id=cid, numero_punto=n+1,
-        valor_patron=valor_patron, valor_indicado=valor_indicado, error=err,
-        tolerancia_inf=ti, tolerancia_sup=ts,
-        incertidumbre=float(incertidumbre) if incertidumbre else None,
-        abs_error_mas_u=aeu, emp_punto=emp_p,
-        dentro_tolerancia=dentro, observacion=observacion or None))
-    db.commit()
+
+    agregados = 0
+    for i in range(len(valor_patron)):
+        vp = (valor_patron[i] or "").strip()
+        vi = (valor_indicado[i] if i < len(valor_indicado) else "").strip()
+        if not vp or not vi:
+            continue  # fila vacía (dejada así a propósito) — se ignora, no es error
+        agregados += 1
+        db.add(_construir_punto(
+            cal, n + agregados, float(vp), float(vi),
+            (incertidumbre[i] if i < len(incertidumbre) else "").strip(),
+            (tolerancia_inf[i] if i < len(tolerancia_inf) else "").strip(),
+            (tolerancia_sup[i] if i < len(tolerancia_sup) else "").strip(),
+            (emp_punto[i] if i < len(emp_punto) else "").strip(),
+            (observacion[i] if i < len(observacion) else "").strip(),
+        ))
+    if agregados:
+        db.commit()
     return RedirectResponse(url=f"/analisis/{cid}", status_code=303)
 
 

@@ -43,35 +43,38 @@
 </div>
 
 <div class="grid-2 mb-4" style="align-items:start;">
-  <!-- Formulario agregar punto -->
+  <!-- Formulario agregar puntos en lote -->
   {% if usuario_actual.rol != 'solo_lectura' %}
   <div class="card">
-    <div class="card-header"><span class="card-title"><i class="fas fa-plus-circle" style="color:var(--primary);margin-right:6px;"></i>Agregar punto</span></div>
+    <div class="card-header">
+      <span class="card-title"><i class="fas fa-plus-circle" style="color:var(--primary);margin-right:6px;"></i>Agregar puntos</span>
+      <span style="font-size:11px;color:var(--text-muted);">Completa las filas que necesites y guarda todas juntas — las vacías se ignoran</span>
+    </div>
     <div class="card-body">
-      <form method="post" action="/verificaciones/{{ verificacion.id }}/punto">
-        <div class="form-group">
-          <label class="form-label">Valor patrón <span class="req">*</span></label>
-          <input type="number" step="any" name="valor_patron" class="form-control" required placeholder="{{ magnitud.unidad or '' }}">
+      <form method="post" action="/verificaciones/{{ verificacion.id }}/puntos/lote" id="form-lote">
+        <div style="overflow-x:auto;">
+          <table class="table" style="font-size:12px;">
+            <thead>
+              <tr>
+                <th>Valor patrón <span class="req">*</span></th>
+                <th>Valor indicado <span class="req">*</span></th>
+                <th>Tol. inferior</th>
+                <th>Tol. superior</th>
+                <th>Observación</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="filas-lote"></tbody>
+          </table>
         </div>
-        <div class="form-group">
-          <label class="form-label">Valor indicado <span class="req">*</span></label>
-          <input type="number" step="any" name="valor_indicado" class="form-control" required placeholder="Lectura del equipo">
+        <div style="display:flex;gap:10px;margin-top:14px;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="agregarFilaLote(1)">
+            <i class="fas fa-plus"></i> Agregar fila
+          </button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save"></i> Guardar puntos
+          </button>
         </div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label">Tolerancia inferior</label>
-            <input type="number" step="any" name="tolerancia_inf" class="form-control" placeholder="Usa EMP si vacío">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Tolerancia superior</label>
-            <input type="number" step="any" name="tolerancia_sup" class="form-control" placeholder="Usa EMP si vacío">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Observación</label>
-          <input type="text" name="observacion" class="form-control" placeholder="Opcional">
-        </div>
-        <button type="submit" class="btn btn-primary w-full"><i class="fas fa-plus"></i> Agregar punto</button>
       </form>
     </div>
   </div>
@@ -163,4 +166,32 @@
   </div>
 </div>
 {% endif %}
+
+{% block scripts %}
+<script>
+  const _UNIDAD = {{ (magnitud.unidad or '')|tojson }};
+
+  function _crearFilaLote() {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="number" step="any" name="valor_patron" class="form-control" placeholder="${_UNIDAD}"></td>
+      <td><input type="number" step="any" name="valor_indicado" class="form-control" placeholder="Lectura"></td>
+      <td><input type="number" step="any" name="tolerancia_inf" class="form-control" placeholder="Usa EMP si vacío"></td>
+      <td><input type="number" step="any" name="tolerancia_sup" class="form-control" placeholder="Usa EMP si vacío"></td>
+      <td><input type="text" name="observacion" class="form-control" placeholder="Opcional"></td>
+      <td><button type="button" class="btn btn-sm btn-outline" onclick="this.closest('tr').remove()" title="Quitar fila"><i class="fas fa-xmark"></i></button></td>`;
+    return tr;
+  }
+
+  function agregarFilaLote(cantidad) {
+    const tbody = document.getElementById('filas-lote');
+    if (!tbody) return;
+    for (let i = 0; i < cantidad; i++) tbody.appendChild(_crearFilaLote());
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    agregarFilaLote(3);
+  });
+</script>
+{% endblock %}
 {% endblock %}
