@@ -235,7 +235,7 @@ logger.info("Cargando módulos...")
 _mods = ["usuarios","equipos","magnitudes","calibraciones","analisis",
          "verificaciones","mantenimientos","config_lab","ilac",
          "dashboard","calendario","plan_mantenimiento","auditoria","notificaciones",
-         "registro_auditoria"]
+         "registro_auditoria","busqueda"]
 _routers = [(n, _import(n)) for n in _mods]
 
 for name, mod in _routers:

@@ -422,6 +422,12 @@ a.mg-step:hover .mg-circle { filter: brightness(1.15); transform: scale(1.06); }
         <i class="fas fa-certificate"></i> Calibraciones
         {% if equipo.magnitudes|selectattr('activa')|list|length > 1 %} — {{ mag.nombre }}{% endif %}
       </a>
+      {% if usuario_actual.rol != 'solo_lectura' %}
+      <a href="/calibraciones/magnitud/{{ mag.id }}/nueva" class="btn btn-accent btn-sm">
+        <i class="fas fa-circle-plus"></i> Registrar calibración
+        {% if equipo.magnitudes|selectattr('activa')|list|length > 1 %} — {{ mag.nombre }}{% endif %}
+      </a>
+      {% endif %}
       <a href="/verificaciones/historial/{{ mag.id }}" class="btn btn-outline btn-sm">
         <i class="fas fa-check-double"></i> Verificaciones
         {% if equipo.magnitudes|selectattr('activa')|list|length > 1 %} — {{ mag.nombre }}{% endif %}
@@ -605,6 +611,11 @@ a.mg-step:hover .mg-circle { filter: brightness(1.15); transform: scale(1.06); }
           <a href="/calibraciones/magnitud/{{ mag.id }}" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px;">
             <i class="fas fa-certificate"></i> Calibraciones
           </a>
+          {% if usuario_actual.rol != 'solo_lectura' and mag.activa %}
+          <a href="/calibraciones/magnitud/{{ mag.id }}/nueva" class="btn btn-accent btn-sm" style="font-size:11px;padding:3px 8px;">
+            <i class="fas fa-circle-plus"></i> Registrar
+          </a>
+          {% endif %}
           <a href="/verificaciones/historial/{{ mag.id }}" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px;">
             <i class="fas fa-check-double"></i> Verificaciones
           </a>

@@ -124,6 +124,54 @@
             filter: drop-shadow(0 2px 8px rgba(0,120,255,0.2));
         }
 
+        /* ── Búsqueda global (sidebar) ───────────────────────────────────── */
+        .sidebar-search { padding: 10px 12px 4px; position: relative; }
+        .sidebar-search-input-wrap { position: relative; }
+        .sidebar-search-input-wrap i.fa-magnifying-glass {
+            position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+            font-size: 12px; color: rgba(255,255,255,0.35); pointer-events: none;
+        }
+        #sidebar-search-input {
+            width: 100%; padding: 8px 10px 8px 30px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: var(--radius-sm);
+            color: white; font-size: 12.5px;
+            transition: all var(--transition);
+        }
+        #sidebar-search-input::placeholder { color: rgba(255,255,255,0.35); }
+        #sidebar-search-input:focus {
+            outline: none; background: rgba(255,255,255,0.1);
+            border-color: var(--accent);
+        }
+        .sidebar-search-results {
+            display: none;
+            position: absolute; left: 12px; right: 12px; top: calc(100% - 2px);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow);
+            max-height: 340px; overflow-y: auto;
+            z-index: 200;
+        }
+        .sidebar-search-results.open { display: block; }
+        .ssr-group-label {
+            padding: 8px 12px 4px; font-size: 9px; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted);
+        }
+        .ssr-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 12px; text-decoration: none; color: var(--text);
+            font-size: 12.5px; cursor: pointer;
+        }
+        .ssr-item:hover, .ssr-item.active { background: var(--bg-card-hover); }
+        .ssr-item i { width: 16px; text-align: center; color: var(--primary-light); flex-shrink: 0; }
+        .ssr-item-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ssr-item-sub { font-size: 10.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ssr-empty, .ssr-loading {
+            padding: 14px 12px; font-size: 12px; color: var(--text-muted); text-align: center;
+        }
+
         .sidebar-nav {
             overflow-y: auto; flex: 1; padding: 8px 6px;
             scrollbar-width: thin;
@@ -546,6 +594,15 @@
         <img src="/static/img/icono_metrogest_largo_oscuro.png" alt="MetroGest">
     </div>
 
+    <div class="sidebar-search">
+        <div class="sidebar-search-input-wrap">
+            <i class="fas fa-magnifying-glass"></i>
+            <input type="text" id="sidebar-search-input" autocomplete="off"
+                   placeholder="Buscar equipo o certificado...">
+        </div>
+        <div class="sidebar-search-results" id="sidebar-search-results"></div>
+    </div>
+
     <nav class="sidebar-nav">
         <div class="nav-section-label">Principal</div>
         <a href="/dashboard/" class="nav-item {% if '/dashboard' in request.url.path %}active{% endif %}">
@@ -702,6 +759,99 @@
             });
         }
     });
+
+    // ── Búsqueda global ─────────────────────────────────────────────────────
+    (function() {
+        const input   = document.getElementById('sidebar-search-input');
+        const panel   = document.getElementById('sidebar-search-results');
+        if (!input || !panel) return;
+
+        let debounceTimer = null;
+        let items = [];
+        let activeIndex = -1;
+
+        function cerrarResultados() {
+            panel.classList.remove('open');
+            panel.innerHTML = '';
+            items = [];
+            activeIndex = -1;
+        }
+
+        function render(resultados) {
+            items = resultados;
+            activeIndex = -1;
+            if (!resultados.length) {
+                panel.innerHTML = '<div class="ssr-empty">Sin resultados</div>';
+                panel.classList.add('open');
+                return;
+            }
+            const grupos = { equipo: 'Equipos', certificado: 'Certificados' };
+            let html = '';
+            let grupoActual = null;
+            resultados.forEach(function(r, i) {
+                if (r.tipo !== grupoActual) {
+                    grupoActual = r.tipo;
+                    html += '<div class="ssr-group-label">' + (grupos[r.tipo] || '') + '</div>';
+                }
+                html += '<a href="' + r.url + '" class="ssr-item" data-index="' + i + '">' +
+                        '<i class="fas ' + r.icono + '"></i>' +
+                        '<div style="min-width:0;flex:1;">' +
+                        '<div class="ssr-item-title">' + r.titulo + '</div>' +
+                        (r.subtitulo ? '<div class="ssr-item-sub">' + r.subtitulo + '</div>' : '') +
+                        '</div></a>';
+            });
+            panel.innerHTML = html;
+            panel.classList.add('open');
+        }
+
+        function buscar(q) {
+            fetch('/busqueda/api?q=' + encodeURIComponent(q))
+                .then(function(r) { return r.json(); })
+                .then(render)
+                .catch(function() { cerrarResultados(); });
+        }
+
+        input.addEventListener('input', function() {
+            const q = input.value.trim();
+            clearTimeout(debounceTimer);
+            if (q.length < 2) { cerrarResultados(); return; }
+            panel.innerHTML = '<div class="ssr-loading"><i class="fas fa-spinner fa-spin"></i> Buscando...</div>';
+            panel.classList.add('open');
+            debounceTimer = setTimeout(function() { buscar(q); }, 250);
+        });
+
+        input.addEventListener('keydown', function(e) {
+            const opciones = panel.querySelectorAll('.ssr-item');
+            if (!opciones.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIndex = Math.min(activeIndex + 1, opciones.length - 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIndex = Math.max(activeIndex - 1, 0);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const destino = opciones[activeIndex] || opciones[0];
+                if (destino) window.location.href = destino.getAttribute('href');
+                return;
+            } else if (e.key === 'Escape') {
+                cerrarResultados();
+                input.blur();
+                return;
+            } else {
+                return;
+            }
+            opciones.forEach(function(el) { el.classList.remove('active'); });
+            if (opciones[activeIndex]) {
+                opciones[activeIndex].classList.add('active');
+                opciones[activeIndex].scrollIntoView({ block: 'nearest' });
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.sidebar-search')) cerrarResultados();
+        });
+    })();
 
     // ── Sidebar móvil ──────────────────────────────────────────────────────
     function toggleSidebar() {

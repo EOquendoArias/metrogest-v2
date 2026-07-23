@@ -202,7 +202,16 @@ if (sessionStorage.getItem('mg_lic_banner_closed') === '1') {
           — {{ {'calibracion':'Calibración','verificacion':'Verificación','mantenimiento':'Mantenimiento'}.get(act.tipo,'') }}
           en {% if act.dias == 0 %}hoy{% elif act.dias == 1 %}mañana{% else %}{{ act.dias }}d{% endif %}
         </span>
-        <a href="/equipos/{{ act.equipo_id }}" style="margin-left:auto;font-size:11px;color:var(--primary);">Ver →</a>
+        {% if act.tipo == 'calibracion' %}
+          {% set act_url = '/calibraciones/magnitud/' ~ act.magnitud_id ~ '/nueva' %}
+        {% elif act.tipo == 'verificacion' %}
+          {% set act_url = '/verificaciones/nueva/' ~ act.magnitud_id %}
+        {% elif act.tipo == 'mantenimiento' %}
+          {% set act_url = '/mantenimientos/' ~ act.mantenimiento_id ~ '/editar' %}
+        {% else %}
+          {% set act_url = '/equipos/' ~ act.equipo_id %}
+        {% endif %}
+        <a href="{{ act_url }}" style="margin-left:auto;font-size:11px;color:var(--primary);">Ver →</a>
       </div>
       {% endif %}
     {% endfor %}
@@ -300,7 +309,20 @@ if (sessionStorage.getItem('mg_lic_banner_closed') === '1') {
             {% set ic_bg='rgba(245,158,11,0.12)' %}{% set ic_col='var(--warning)' %}
           {% endif %}
 
-          <a href="/equipos/{{ act.equipo_id }}" class="act-row">
+          {% if act.tipo == 'calibracion' %}
+            {% set act_url = '/calibraciones/magnitud/' ~ act.magnitud_id ~ '/nueva' %}
+            {% set act_accion = 'Registrar calibración' %}
+          {% elif act.tipo == 'verificacion' %}
+            {% set act_url = '/verificaciones/nueva/' ~ act.magnitud_id %}
+            {% set act_accion = 'Registrar verificación' %}
+          {% elif act.tipo == 'mantenimiento' %}
+            {% set act_url = '/mantenimientos/' ~ act.mantenimiento_id ~ '/editar' %}
+            {% set act_accion = 'Ver mantenimiento' %}
+          {% else %}
+            {% set act_url = '/equipos/' ~ act.equipo_id %}
+            {% set act_accion = 'Ver equipo' %}
+          {% endif %}
+          <a href="{{ act_url }}" class="act-row" title="{{ act_accion }}">
             <div class="act-icon" style="background:{{ ic_bg }};color:{{ ic_col }};">
               <i class="fas {{ act.icono }}"></i>
             </div>
