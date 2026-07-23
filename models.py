@@ -372,3 +372,23 @@ class HistorialAlertas(Base):
 
     equipo   = relationship("Equipo")
     magnitud = relationship("MagnitudEquipo")
+
+
+class RegistroAuditoria(Base):
+    """
+    Rastro de auditoría: quién cambió qué campo, de qué valor a cuál, y cuándo.
+    Solo se escribe desde utils/auditoria_trail.py (listeners de SQLAlchemy) —
+    no hay ninguna ruta que permita editar o borrar estos registros.
+    """
+    __tablename__ = "registro_auditoria"
+    id             = Column(Integer, primary_key=True, index=True)
+    tabla          = Column(String(50), nullable=False, index=True)
+    registro_id    = Column(Integer, nullable=False, index=True)
+    accion         = Column(String(20), nullable=False)   # "crear" | "modificar" | "eliminar"
+    campo          = Column(String(100), nullable=True)   # solo aplica a "modificar"
+    valor_anterior = Column(Text, nullable=True)
+    valor_nuevo    = Column(Text, nullable=True)
+    usuario_id     = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    fecha          = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+
+    usuario = relationship("Usuario")

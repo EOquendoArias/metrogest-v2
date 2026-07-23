@@ -12,6 +12,7 @@ load_dotenv()
 
 from database import engine, Base, SessionLocal
 import models, auth
+import utils.auditoria_trail as auditoria_trail  # registra los listeners de auditoría al importarse
 
 Base.metadata.create_all(bind=engine)
 
@@ -43,6 +44,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="MetroGest v2", lifespan=lifespan)
 
+class AuditoriaContextMiddleware(BaseHTTPMiddleware):
+    """Deja el id del usuario autenticado disponible para utils/auditoria_trail.py,
+    que lo lee desde los listeners de SQLAlchemy al capturar cada cambio."""
+    async def dispatch(self, request, call_next):
+        token = auditoria_trail.usuario_actual_id.set(request.session.get("user_id"))
+        try:
+            return await call_next(request)
+        finally:
+            auditoria_trail.usuario_actual_id.reset(token)
+
+app.add_middleware(AuditoriaContextMiddleware)
+
 RUTAS_LIBRES_PASSWORD = {"/usuarios/login", "/usuarios/logout",
                           "/usuarios/cambiar-password-inicial", "/static", "/favicon.ico"}
 
@@ -62,9 +75,10 @@ class ForzarCambioPasswordMiddleware(BaseHTTPMiddleware):
                 db.close()
         return await call_next(request)
 
-# Nota de orden: esta middleware se agrega ANTES que SessionMiddleware para que,
-# en la pila de Starlette (el último agregado queda más externo), Session se
-# ejecute antes y request.session ya exista cuando esta corra.
+# Nota de orden: ForzarCambioPasswordMiddleware y AuditoriaContextMiddleware se
+# agregan ANTES que SessionMiddleware para que, en la pila de Starlette (el
+# último agregado queda más externo), Session se ejecute primero y
+# request.session ya exista cuando ellas corran.
 app.add_middleware(ForzarCambioPasswordMiddleware)
 
 _session_key = os.getenv("SESSION_SECRET", "")
@@ -104,12 +118,13 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 print("Cargando módulos...")
 _mods = ["usuarios","equipos","magnitudes","calibraciones","analisis",
          "verificaciones","mantenimientos","config_lab","ilac",
-         "dashboard","calendario","plan_mantenimiento","auditoria","notificaciones"]
+         "dashboard","calendario","plan_mantenimiento","auditoria","notificaciones",
+         "registro_auditoria"]
 _routers = [(n, _import(n)) for n in _mods]
 
 for name, mod in _routers:
     if mod:
-        prefix = "/config-lab" if name=="config_lab" else "/dashboard" if name=="dashboard" else "/calendario" if name=="calendario" else "/plan-mantenimiento" if name=="plan_mantenimiento" else f"/{name}"
+        prefix = "/config-lab" if name=="config_lab" else "/dashboard" if name=="dashboard" else "/calendario" if name=="calendario" else "/plan-mantenimiento" if name=="plan_mantenimiento" else "/registro-auditoria" if name=="registro_auditoria" else f"/{name}"
         app.include_router(mod.router, prefix=prefix, tags=[name])
 
 @app.get("/sin-licencia", include_in_schema=False)

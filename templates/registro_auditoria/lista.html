@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Rastro de auditoría{% endblock %}
+{% block page_title %}Rastro de auditoría{% endblock %}
+{% block breadcrumb %}Quién cambió qué, cuándo — registro inmutable, no editable desde la aplicación{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-body">
+        <form method="get" action="/registro-auditoria/" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+                <label style="display:block;font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px;">Tabla</label>
+                <select name="tabla" class="form-control" style="min-width:180px;">
+                    <option value="">Todas</option>
+                    {% for t in tablas_disponibles %}
+                    <option value="{{ t }}" {% if t == tabla_filtro %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px;">Usuario</label>
+                <select name="usuario_id" class="form-control" style="min-width:180px;">
+                    <option value="0">Todos</option>
+                    {% for us in usuarios_disponibles %}
+                    <option value="{{ us.id }}" {% if us.id == usuario_filtro %}selected{% endif %}>{{ us.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px;">Acción</label>
+                <select name="accion" class="form-control" style="min-width:150px;">
+                    <option value="">Todas</option>
+                    {% for valor, etiqueta in acciones_label.items() %}
+                    <option value="{{ valor }}" {% if valor == accion_filtro %}selected{% endif %}>{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Filtrar</button>
+            {% if tabla_filtro or usuario_filtro or accion_filtro %}
+            <a href="/registro-auditoria/" class="btn btn-outline btn-sm">Quitar filtros</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">{{ total }} registro(s)</span>
+    </div>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Usuario</th>
+                <th>Tabla</th>
+                <th>ID</th>
+                <th>Acción</th>
+                <th>Campo</th>
+                <th>Anterior → Nuevo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in registros %}
+            <tr>
+                <td style="font-size:12px;white-space:nowrap;">{{ r.fecha.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                <td style="font-size:13px;">{{ r.usuario.nombre if r.usuario else '—' }}</td>
+                <td style="font-size:12px;color:var(--text-muted);">{{ r.tabla }}</td>
+                <td style="font-size:12px;color:var(--text-muted);">{{ r.registro_id }}</td>
+                <td>
+                    {% set colores = {'crear':'success','modificar':'warning','eliminar':'danger'} %}
+                    <span class="badge badge-{{ colores.get(r.accion,'secondary') }}">{{ acciones_label.get(r.accion, r.accion) }}</span>
+                </td>
+                <td style="font-size:12px;">{{ r.campo or '—' }}</td>
+                <td style="font-size:12px;max-width:420px;">
+                    {% if r.accion == 'modificar' %}
+                        <span style="color:var(--danger);">{{ (r.valor_anterior or '—')[:80] }}</span>
+                        <i class="fas fa-arrow-right" style="margin:0 4px;color:var(--text-muted);"></i>
+                        <span style="color:var(--success);">{{ (r.valor_nuevo or '—')[:80] }}</span>
+                    {% elif r.accion == 'crear' %}
+                        <span style="color:var(--text-muted);font-family:monospace;font-size:11px;">{{ (r.valor_nuevo or '')[:150] }}{% if r.valor_nuevo and r.valor_nuevo|length > 150 %}…{% endif %}</span>
+                    {% else %}
+                        <span style="color:var(--text-muted);font-family:monospace;font-size:11px;">{{ (r.valor_anterior or '')[:150] }}{% if r.valor_anterior and r.valor_anterior|length > 150 %}…{% endif %}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">Sin registros para los filtros seleccionados.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_paginas > 1 %}
+<div style="display:flex;justify-content:center;align-items:center;gap:14px;margin-top:20px;">
+    {% set qs = '&tabla=' + tabla_filtro if tabla_filtro else '' %}
+    {% set qs = qs + '&usuario_id=' + usuario_filtro|string if usuario_filtro else qs %}
+    {% set qs = qs + '&accion=' + accion_filtro if accion_filtro else qs %}
+    <a href="/registro-auditoria/?page={{ page - 1 }}{{ qs }}"
+       class="btn btn-sm" style="{% if page <= 1 %}pointer-events:none;opacity:0.4;{% endif %}">
+        <i class="fas fa-chevron-left"></i> Anterior
+    </a>
+    <span style="font-size:13px;color:var(--text-muted);">Página {{ page }} de {{ total_paginas }}</span>
+    <a href="/registro-auditoria/?page={{ page + 1 }}{{ qs }}"
+       class="btn btn-sm" style="{% if page >= total_paginas %}pointer-events:none;opacity:0.4;{% endif %}">
+        Siguiente <i class="fas fa-chevron-right"></i>
+    </a>
+</div>
+{% endif %}
+{% endblock %}
