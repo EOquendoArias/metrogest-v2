@@ -38,7 +38,8 @@ async def crear(mid: int, request: Request,
     trazabilidad: str = Form(""), observaciones: str = Form(""), costo: str = Form(""),
     certificado: UploadFile = File(None), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
-    if not u: return RedirectResponse(url="/usuarios/login")
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/calibraciones/magnitud/{mid}")
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id==mid).first()
     if not mag: raise HTTPException(status_code=404)
     cert_path = None

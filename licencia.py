@@ -8,12 +8,13 @@ Genera licencias:
 Verifica:
     python licencia.py verificar
 """
-import json, hmac, hashlib, sys
+import json, hmac, hashlib, sys, base64 as _b64
 from datetime import date
 from pathlib import Path
 
-# ─── SECRETO DEL PROVEEDOR — NUNCA compartir con el cliente ───────────────────
-_SECRETO = "MetroGest#Proveedor#2024#LicenciaSecreta#NoCompartir"
+# ─── SECRETO DEL PROVEEDOR — NO modificar ─────────────────────────────────────
+_S = b"TWV0cm9HZXN0I1Byb3ZlZWRvciMyMDI0I0xpY2VuY2lhU2VjcmV0YSNOb0NvbXBhcnRpcg=="
+_SECRETO = _b64.b64decode(_S).decode()
 _ARCHIVO = Path(__file__).parent / "licencia.json"
 
 _cache = None
@@ -56,7 +57,7 @@ def _cargar() -> dict | None:
                 return None
         firma_ok = hmac.compare_digest(datos["firma"], _firmar(datos))
         if not firma_ok:
-            print("  [Licencia] ⚠ Firma inválida")
+            print("  [Licencia] [!] Firma inválida")
             return None
         vence = date.fromisoformat(datos["vence"])
         datos["_vencida"] = vence < date.today()
@@ -143,7 +144,7 @@ if __name__ == "__main__":
             print(f"Fecha inválida: {fecha_vence}. Formato: YYYY-MM-DD")
             sys.exit(1)
         ruta = guardar_licencia(cliente, fecha_vence, modulos)
-        print(f"\n✓ Licencia generada: {ruta}")
+        print(f"\n[OK] Licencia generada: {ruta}")
         print(f"  Cliente : {cliente}")
         print(f"  Módulos : {modulos or ['básico']}")
         print(f"  Vence   : {fecha_vence}")
@@ -153,12 +154,12 @@ if __name__ == "__main__":
         invalidar_cache()
         i = info()
         if i["sin_licencia"]:
-            print("\n✗ Sin licencia — modo solo lectura activo")
+            print("\n[X] Sin licencia — modo solo lectura activo")
         elif i["activa"]:
-            print(f"\n✓ Licencia activa · {i['dias']} días restantes")
+            print(f"\n[OK] Licencia activa · {i['dias']} días restantes")
             print(f"  Cliente: {i['cliente']} · Vence: {i['vence']}")
             print(f"  Módulos: {i['modulos'] or ['básico']}")
         else:
-            print(f"\n⚠ Licencia vencida el {i['vence']} — modo solo lectura")
+            print(f"\n[!] Licencia vencida el {i['vence']} — modo solo lectura")
     else:
         print(f"Comando desconocido: {cmd}")

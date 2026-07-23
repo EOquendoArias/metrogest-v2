@@ -43,7 +43,8 @@ async def crear(eid: int, request: Request,
     afecta_medicion: str = Form(""), observaciones_metrologicas: str = Form(""),
     archivo: UploadFile = File(None), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
-    if not u: return RedirectResponse(url="/usuarios/login")
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/mantenimientos/equipo/{eid}")
     ap = None
     if archivo and archivo.filename:
         ext = os.path.splitext(archivo.filename)[1]

@@ -1,0 +1,37 @@
+{# Partial: formulario para aplicar el intervalo de un método avanzado.
+   Requiere en contexto: aplicar_url, analisis (con intervalo_sugerido, requiere_justificacion), color. #}
+<div class="card"><div class="card-body" style="padding:22px 26px;">
+  <div style="font-size:15px;font-weight:700;color:var(--text-strong);margin-bottom:4px;">
+    <i class="fas fa-check-double" style="color:{{ color }};margin-right:6px;"></i> Aplicar este período
+  </div>
+  <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px;">
+    Puedes aceptar el valor recomendado o ajustarlo. Arriba de 18 meses se exige justificación escrita.
+  </div>
+  <form method="post" action="{{ aplicar_url }}" id="form-avanzado">
+    {% if extra_hidden %}{{ extra_hidden }}{% endif %}
+    <div style="display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Período (meses)</label>
+        <input type="number" name="intervalo" id="inp-intervalo" min="1" max="60"
+               value="{{ analisis.intervalo_sugerido }}" class="form-control"
+               style="width:120px;font-size:18px;font-weight:800;text-align:center;" oninput="chkJustif()">
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);padding-bottom:12px;">
+        Mínimo 1 · Máximo 60 meses<br>
+        <span id="hint-justif" style="color:var(--warning);display:none;">
+          <i class="fas fa-triangle-exclamation"></i> Requiere justificación</span>
+      </div>
+    </div>
+    <div class="form-group" id="box-justif" style="margin-top:8px;display:none;">
+      <label class="form-label">Justificación técnica <span class="req">*</span>
+        <span style="font-size:11px;color:var(--text-muted);font-weight:400;">(queda en el historial del equipo)</span>
+      </label>
+      <textarea name="justificacion" id="txt-justif" class="form-control" rows="3"
+                placeholder="Explica la razón técnica para este intervalo..."></textarea>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:18px;">
+      <a href="/ilac/periodo/{{ magnitud.id }}" class="btn btn-outline"><i class="fas fa-arrow-left"></i> Ver otras opciones</a>
+      <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Aplicar período</button>
+    </div>
+  </form>
+</div></div>

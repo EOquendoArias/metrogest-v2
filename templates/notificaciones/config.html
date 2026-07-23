@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Configuración de notificaciones{% endblock %}
+{% block page_title %}Notificaciones{% endblock %}
+{% block breadcrumb %}Alertas por email · configuración{% endblock %}
+
+{% block content %}
+
+{% if ok %}
+<div class="alert alert-success" id="mg-alert-ok">
+  <i class="fas fa-check-circle"></i> Configuración guardada correctamente.
+</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger">
+  <i class="fas fa-circle-exclamation"></i> {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="/notificaciones/guardar" id="form-notif">
+
+  <!-- ── Email destinatario ─────────────────────────────────────────── -->
+  <div class="form-section">
+    <div class="form-section-title">
+      <i class="fas fa-envelope"></i> Email destinatario de alertas
+    </div>
+    <div class="infobox infobox-blue" style="margin-bottom:20px;">
+      <i class="fas fa-info-circle"></i>
+      Todas las alertas automáticas se enviarán a esta dirección.
+      Puedes ingresar varios correos separados por coma.
+    </div>
+    <div class="form-grid" style="grid-template-columns:1fr auto;align-items:end;gap:12px;">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Correo electrónico <span class="req">*</span></label>
+        <div style="position:relative;">
+          <i class="fas fa-envelope" style="position:absolute;left:14px;top:50%;
+             transform:translateY(-50%);color:var(--text-muted);font-size:13px;"></i>
+          <input type="email" name="email_destinatario" id="email-dest"
+                 class="form-control" style="padding-left:40px;"
+                 value="{{ cfg.email_destinatario or '' }}"
+                 placeholder="admin@empresa.com">
+        </div>
+      </div>
+      <div style="padding-bottom:1px;">
+        <button type="button" id="btn-prueba"
+                class="btn btn-secondary" style="white-space:nowrap;height:42px;">
+          <i class="fas fa-paper-plane"></i> Enviar prueba
+        </button>
+      </div>
+    </div>
+
+    <!-- Resultado del envío de prueba -->
+    <div id="prueba-result" style="display:none;margin-top:14px;"></div>
+  </div>
+
+  <!-- ── Tipos de alerta ────────────────────────────────────────────── -->
+  <div class="form-section">
+    <div class="form-section-title">
+      <i class="fas fa-bell"></i> Alertas de calibración
+    </div>
+    <div class="infobox infobox-blue" style="margin-bottom:20px;">
+      <i class="fas fa-info-circle"></i>
+      El sistema evalúa estas alertas cada día al ejecutarse. Una vez enviada,
+      cada alerta <strong>no se repite</strong> para el mismo equipo en el mismo intervalo.
+    </div>
+
+    <table class="table" style="font-size:13px;">
+      <thead>
+        <tr>
+          <th style="width:48px;text-align:center;">Activa</th>
+          <th>Cuándo</th>
+          <th>Asunto del email</th>
+          <th style="width:100px;text-align:center;">Urgencia</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        {% set alertas = [
+          ('alerta_antes_30',  cfg.alerta_antes_30,  '30 días antes del vencimiento', '⚠️ Próximo a vencer',  'low'),
+          ('alerta_antes_15',  cfg.alerta_antes_15,  '15 días antes del vencimiento', '⚠️ Próximo a vencer',  'low'),
+          ('alerta_antes_7',   cfg.alerta_antes_7,   '7 días antes del vencimiento',  '⚠️ Próximo a vencer',  'medium'),
+          ('alerta_antes_1',   cfg.alerta_antes_1,   '1 día antes del vencimiento',   '⚠️ Próximo a vencer',  'high'),
+          ('alerta_dia_0',     cfg.alerta_dia_0,     'El día exacto del vencimiento', '🔴 Vence hoy',         'critical'),
+          ('alerta_despues_1', cfg.alerta_despues_1, '1 día después del vencimiento', '❌ VENCIDO',           'critical'),
+          ('alerta_despues_7', cfg.alerta_despues_7, '7 días después del vencimiento','❌ VENCIDO',           'critical'),
+        ] %}
+
+        {% for name, val, cuando, asunto, nivel in alertas %}
+        <tr>
+          <td style="text-align:center;vertical-align:middle;">
+            <label class="mg-toggle" title="{{ 'Activa' if val else 'Inactiva' }}">
+              <input type="checkbox" name="{{ name }}" {% if val %}checked{% endif %}>
+              <span class="mg-toggle-slider"></span>
+            </label>
+          </td>
+          <td style="font-weight:600;color:var(--text-strong);vertical-align:middle;">
+            {{ cuando }}
+          </td>
+          <td style="color:var(--text-muted);vertical-align:middle;font-family:monospace;font-size:12px;">
+            {{ asunto }}
+          </td>
+          <td style="text-align:center;vertical-align:middle;">
+            {% if nivel == 'low' %}
+              <span class="badge" style="background:rgba(59,130,246,0.12);color:#60a5fa;">Normal</span>
+            {% elif nivel == 'medium' %}
+              <span class="badge" style="background:rgba(245,158,11,0.12);color:#fcd34d;">Media</span>
+            {% elif nivel == 'high' %}
+              <span class="badge" style="background:rgba(239,68,68,0.12);color:#f87171;">Alta</span>
+            {% else %}
+              <span class="badge" style="background:rgba(239,68,68,0.20);color:#ef4444;font-weight:700;">Crítica</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+
+      </tbody>
+    </table>
+  </div>
+
+
+  <!-- ── Botones ────────────────────────────────────────────────────── -->
+  <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px;">
+    <a href="/equipos/" class="btn btn-secondary">
+      <i class="fas fa-arrow-left"></i> Cancelar
+    </a>
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-save"></i> Guardar configuración
+    </button>
+  </div>
+
+</form>
+
+<!-- ── Estilos del toggle ─────────────────────────────────────────── -->
+<style>
+.mg-toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.mg-toggle input { opacity: 0; width: 0; height: 0; }
+.mg-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 22px;
+  transition: 0.2s;
+}
+.mg-toggle-slider::before {
+  content: "";
+  position: absolute;
+  width: 16px; height: 16px;
+  left: 3px; top: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.mg-toggle input:checked + .mg-toggle-slider {
+  background: var(--primary);
+}
+.mg-toggle input:checked + .mg-toggle-slider::before {
+  transform: translateX(18px);
+}
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+</style>
+
+<script>
+(function () {
+
+  // ── Auto-ocultar alerta de éxito ───────────────────────────────────
+  const alertOk = document.getElementById('mg-alert-ok');
+  if (alertOk) setTimeout(() => alertOk.style.opacity = '0', 3500);
+
+  // ── Envío de prueba ────────────────────────────────────────────────
+  document.getElementById('btn-prueba').addEventListener('click', async function () {
+    const btn    = this;
+    const result = document.getElementById('prueba-result');
+    const email  = document.getElementById('email-dest').value.trim();
+
+    if (!email) {
+      result.style.display = 'block';
+      result.innerHTML = `<div class="infobox" style="background:rgba(239,68,68,0.1);
+        border-color:var(--danger);color:var(--danger);">
+        <i class="fas fa-circle-exclamation"></i>
+        Ingresa un email destinatario antes de enviar la prueba.
+      </div>`;
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando…';
+    result.style.display = 'none';
+
+    try {
+      const resp = await fetch('/notificaciones/prueba', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await resp.json();
+
+      if (data.ok) {
+        result.style.display = 'block';
+        result.innerHTML = `<div class="infobox infobox-green">
+          <i class="fas fa-check-circle"></i> ${data.msg}
+        </div>`;
+      } else {
+        result.style.display = 'block';
+        result.innerHTML = `<div class="infobox" style="background:rgba(239,68,68,0.1);
+          border-color:var(--danger);color:var(--danger);">
+          <i class="fas fa-circle-exclamation"></i> ${data.msg}
+        </div>`;
+      }
+    } catch (e) {
+      result.style.display = 'block';
+      result.innerHTML = `<div class="infobox" style="background:rgba(239,68,68,0.1);
+        border-color:var(--danger);color:var(--danger);">
+        <i class="fas fa-circle-exclamation"></i> Error de conexión con el servidor.
+      </div>`;
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar prueba';
+  });
+
+})();
+</script>
+
+{% endblock %}

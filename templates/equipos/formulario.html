@@ -100,7 +100,8 @@
       <div class="form-group">
         <label class="form-label">Fecha de adquisición</label>
         <input type="date" name="fecha_adquisicion" class="form-control"
-               value="{{ equipo.fecha_adquisicion.strftime('%Y-%m-%d') if equipo and equipo.fecha_adquisicion else '' }}">
+               value="{{ equipo.fecha_adquisicion.strftime('%Y-%m-%d') if equipo and equipo.fecha_adquisicion else '' }}"
+               autocomplete="off" max="2099-12-31">
       </div>
     </div>
     <div class="form-group">

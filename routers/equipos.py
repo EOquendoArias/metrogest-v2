@@ -111,6 +111,12 @@ async def crear(request: Request, codigo: str = Form(...), nombre: str = Form(..
     if db.query(models.Equipo).filter(models.Equipo.codigo == codigo).first():
         return T.TemplateResponse(request, "equipos/formulario.html",
             {"usuario_actual": u, "equipo": None, "error": f"Código '{codigo}' ya existe"})
+    try:
+        fecha_adq = date.fromisoformat(fecha_adquisicion) if fecha_adquisicion else None
+    except ValueError:
+        return T.TemplateResponse(request, "equipos/formulario.html",
+            {"usuario_actual": u, "equipo": None,
+             "error": "Fecha inválida. Por favor usa el selector de calendario."})
     def _save(f, prefix):
         if not f or not f.filename: return None
         ext = os.path.splitext(f.filename)[1]
@@ -121,7 +127,7 @@ async def crear(request: Request, codigo: str = Form(...), nombre: str = Form(..
         codigo=codigo, nombre=nombre, descripcion=descripcion or None,
         marca=marca or None, modelo=modelo or None,
         numero_serie=numero_serie or None, numero_inventario=numero_inventario or None,
-        fecha_adquisicion=date.fromisoformat(fecha_adquisicion) if fecha_adquisicion else None,
+        fecha_adquisicion=fecha_adq,
         costo=float(costo) if costo else None,
         area=area or None, ubicacion=ubicacion or None, responsable=responsable or None,
         foto_path=_save(foto, "foto"), manual_path=_save(manual, "manual"),
@@ -213,13 +219,19 @@ async def editar(eid: int, request: Request,
         n = f"static/uploads/{prefix}_{uuid.uuid4()}{ext}"
         with open(n, "wb") as fp: shutil.copyfileobj(f.file, fp)
         return f"/{n}"
+    try:
+        fecha_adq = date.fromisoformat(fecha_adquisicion) if fecha_adquisicion else None
+    except ValueError:
+        return T.TemplateResponse(request, "equipos/formulario.html",
+            {"usuario_actual": u, "equipo": eq,
+             "error": "Fecha inválida. Por favor usa el selector de calendario."})
     fp = _save(foto, "foto"); mp = _save(manual, "manual")
     if fp: eq.foto_path = fp
     if mp: eq.manual_path = mp
     eq.codigo=codigo; eq.nombre=nombre; eq.descripcion=descripcion or None
     eq.marca=marca or None; eq.modelo=modelo or None
     eq.numero_serie=numero_serie or None; eq.numero_inventario=numero_inventario or None
-    eq.fecha_adquisicion=date.fromisoformat(fecha_adquisicion) if fecha_adquisicion else None
+    eq.fecha_adquisicion=fecha_adq
     eq.costo=float(costo) if costo else None
     eq.area=area or None; eq.ubicacion=ubicacion or None; eq.responsable=responsable or None
     db.commit()

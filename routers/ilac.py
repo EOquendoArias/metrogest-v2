@@ -29,6 +29,7 @@ def riesgo_page(mid: int, request: Request, db: Session = Depends(get_db)):
         "usuario_actual": u, "magnitud": mag, "equipo": mag.equipo,
         "ev": ev, "hoy": date.today(), "campos_f": CAMPOS_F,
         "error_exceso": error_exceso,
+        "requiere_confirmacion": request.query_params.get("requiere_confirmacion"),
     })
 
 @router.post("/riesgo/{mid}")
@@ -45,10 +46,12 @@ def guardar_riesgo(mid: int, request: Request,
     justificacion: str=Form(""),
     justificacion_exceso: str=Form(""),
     evaluado_por: str=Form(""),
+    confirmar_edicion: str=Form(""),
     db: Session = Depends(get_db)):
 
     u = auth.obtener_usuario_actual(request, db)
-    if not u: return RedirectResponse(url="/usuarios/login")
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/ilac/riesgo/{mid}")
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
     if not mag: raise HTTPException(status_code=404)
 
@@ -67,6 +70,13 @@ def guardar_riesgo(mid: int, request: Request,
 
     ev = db.query(models.EvaluacionRiesgo).filter(
         models.EvaluacionRiesgo.magnitud_id == mid).first()
+
+    # El §5.1 (registro de la calibración inicial) se hace una sola vez.
+    # Re-editarlo requiere confirmación explícita del usuario.
+    if ev is not None and confirmar_edicion != "si":
+        return RedirectResponse(
+            url=f"/ilac/riesgo/{mid}?requiere_confirmacion=1", status_code=302)
+
     v = dict(magnitud_id=mid,
              f_incertidumbre=f_incertidumbre, f_tipo=f_tipo,
              f_riesgo_emp=f_riesgo_emp, f_fabricante=f_fabricante,
@@ -87,15 +97,23 @@ def guardar_riesgo(mid: int, request: Request,
 
     ci = db.query(models.ConfigILAC).filter(
         models.ConfigILAC.magnitud_id == mid).first()
-    if ci:
-        ci.intervalo_inicial_meses = ado; ci.intervalo_actual_meses = ado
-    else:
-        db.add(models.ConfigILAC(magnitud_id=mid,
-                                   intervalo_inicial_meses=ado,
-                                   intervalo_actual_meses=ado))
-    if mag.calibraciones:
-        ul = sorted(mag.calibraciones, key=lambda c: c.fecha_calibracion)[-1]
-        ul.proxima_calibracion = ul.fecha_calibracion + relativedelta(months=ado)
+    if not ci:
+        ci = models.ConfigILAC(magnitud_id=mid, intervalo_inicial_meses=ado,
+                                 intervalo_actual_meses=ado)
+        db.add(ci)
+    # El §5.1 siempre fija el intervalo INICIAL (registro estable de la 1ª calibración)
+    ci.intervalo_inicial_meses = ado
+
+    # Solo controla el intervalo VIGENTE si ningún método avanzado (M1-M4/manual) lo maneja.
+    # Así, cambiar el §5.1 no pisa las frecuencias definidas luego por los métodos.
+    cals = sorted(mag.calibraciones, key=lambda c: c.fecha_calibracion)
+    ultima = cals[-1] if cals else None
+    METODOS_AVANZADOS = ("deriva_m1", "caja-negra", "horas", "escalera",
+                         "ajuste_manual", "estandar")
+    if ultima is None or ultima.metodo_periodo not in METODOS_AVANZADOS:
+        ci.intervalo_actual_meses = ado
+        if ultima:
+            ultima.proxima_calibracion = ultima.fecha_calibracion + relativedelta(months=ado)
     db.commit()
     return RedirectResponse(url=f"/ilac/riesgo/{mid}", status_code=302)
 
@@ -150,7 +168,8 @@ def guardar_periodo(mid: int, request: Request,
     justificacion: str = Form(""),
     db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
-    if not u: return RedirectResponse(url="/usuarios/login")
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/ilac/periodo/{mid}")
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
     if not mag: raise HTTPException(status_code=404)
 
@@ -186,6 +205,283 @@ def guardar_periodo(mid: int, request: Request,
 
     db.commit()
     return RedirectResponse(url=f"/calibraciones/magnitud/{mid}", status_code=302)
+
+
+# ── M1 · ANÁLISIS DE DERIVA ───────────────────────────────────────────────────
+
+@router.get("/deriva/{mid}", response_class=HTMLResponse)
+def deriva_page(mid: int, request: Request, db: Session = Depends(get_db)):
+    u = auth.obtener_usuario_actual(request, db)
+    if not u:
+        return RedirectResponse(url="/usuarios/login")
+    mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
+    if not mag:
+        raise HTTPException(status_code=404)
+
+    from licencia import tiene_modulo
+    if not tiene_modulo("avanzado_ilac"):
+        return RedirectResponse(url=f"/ilac/periodo/{mid}")
+
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    from utils.deriva import analizar_deriva
+    analisis = analizar_deriva(mag, ci)
+
+    return T.TemplateResponse(request, "ilac/deriva.html", {
+        "usuario_actual": u,
+        "magnitud":       mag,
+        "equipo":         mag.equipo,
+        "analisis":       analisis,
+        "error":          request.query_params.get("error"),
+    })
+
+
+@router.post("/deriva/{mid}/aplicar")
+def aplicar_deriva(mid: int, request: Request,
+                   intervalo: int = Form(...),
+                   justificacion: str = Form(""),
+                   db: Session = Depends(get_db)):
+    u = auth.obtener_usuario_actual(request, db)
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/ilac/deriva/{mid}", status_code=303)
+    mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
+    if not mag:
+        raise HTTPException(status_code=404)
+
+    # Tope 60 meses; arriba de 18 exige justificación escrita
+    intervalo = max(1, min(intervalo, 60))
+    if intervalo > 18 and not justificacion.strip():
+        return RedirectResponse(url=f"/ilac/deriva/{mid}?error=justif", status_code=303)
+
+    just_final = justificacion.strip() or f"Análisis de deriva M1 · {intervalo} meses"
+
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    if ci:
+        ci.intervalo_actual_meses = intervalo
+        ci.metodo = "m1"
+    else:
+        db.add(models.ConfigILAC(magnitud_id=mid,
+                                   intervalo_inicial_meses=intervalo,
+                                   intervalo_actual_meses=intervalo,
+                                   metodo="m1"))
+
+    if mag.calibraciones:
+        ultima = sorted(mag.calibraciones, key=lambda c: c.fecha_calibracion)[-1]
+        ultima.proxima_calibracion   = ultima.fecha_calibracion + relativedelta(months=intervalo)
+        ultima.metodo_periodo        = "deriva_m1"
+        ultima.justificacion_periodo = just_final
+
+    db.add(models.HistorialEstado(
+        equipo_id=mag.equipo_id, usuario_id=u.id,
+        estado_anterior=None, estado_nuevo="periodo_actualizado",
+        motivo=f"{mag.nombre}: período {intervalo} meses (deriva M1). {just_final}"))
+
+    db.commit()
+    return RedirectResponse(url=f"/calibraciones/magnitud/{mid}", status_code=303)
+
+
+# ── Helper compartido para aplicar un período avanzado ────────────────────────
+
+def _aplicar_periodo(db, u, mag, mid, intervalo, justificacion, metodo, etiqueta):
+    """Guarda el intervalo de un método avanzado. Tope 60; >18 exige justificación."""
+    intervalo = max(1, min(intervalo, 60))
+    if intervalo > 18 and not justificacion.strip():
+        return RedirectResponse(url=f"/ilac/{metodo}/{mid}?error=justif", status_code=303)
+
+    just_final = justificacion.strip() or f"{etiqueta} · {intervalo} meses"
+
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    if ci:
+        ci.intervalo_actual_meses = intervalo
+        ci.metodo = metodo
+    else:
+        db.add(models.ConfigILAC(magnitud_id=mid, intervalo_inicial_meses=intervalo,
+                                   intervalo_actual_meses=intervalo, metodo=metodo))
+
+    if mag.calibraciones:
+        ultima = sorted(mag.calibraciones, key=lambda c: c.fecha_calibracion)[-1]
+        ultima.proxima_calibracion   = ultima.fecha_calibracion + relativedelta(months=intervalo)
+        ultima.metodo_periodo        = metodo
+        ultima.justificacion_periodo = just_final
+
+    db.add(models.HistorialEstado(
+        equipo_id=mag.equipo_id, usuario_id=u.id,
+        estado_anterior=None, estado_nuevo="periodo_actualizado",
+        motivo=f"{mag.nombre}: período {intervalo} meses ({etiqueta}). {just_final}"))
+    db.commit()
+    return RedirectResponse(url=f"/calibraciones/magnitud/{mid}", status_code=303)
+
+
+def _cargar_mag_avanzado(mid, request, db):
+    """Valida usuario, magnitud y licencia. Retorna (u, mag, redirect|None)."""
+    u = auth.obtener_usuario_actual(request, db)
+    if not u:
+        return None, None, RedirectResponse(url="/usuarios/login")
+    mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
+    if not mag:
+        raise HTTPException(status_code=404)
+    from licencia import tiene_modulo
+    if not tiene_modulo("avanzado_ilac"):
+        return u, mag, RedirectResponse(url=f"/ilac/periodo/{mid}")
+    return u, mag, None
+
+
+# ── M4 · ESCALERA ─────────────────────────────────────────────────────────────
+
+@router.get("/escalera/{mid}", response_class=HTMLResponse)
+def escalera_page(mid: int, request: Request, db: Session = Depends(get_db)):
+    u, mag, redir = _cargar_mag_avanzado(mid, request, db)
+    if redir:
+        return redir
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    from utils.escalera import analizar_escalera
+    analisis = analizar_escalera(mag, ci)
+    return T.TemplateResponse(request, "ilac/escalera.html", {
+        "usuario_actual": u, "magnitud": mag, "equipo": mag.equipo,
+        "analisis": analisis, "error": request.query_params.get("error")})
+
+
+@router.post("/escalera/{mid}/aplicar")
+def aplicar_escalera(mid: int, request: Request, intervalo: int = Form(...),
+                     justificacion: str = Form(""), db: Session = Depends(get_db)):
+    u = auth.obtener_usuario_actual(request, db)
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/ilac/escalera/{mid}", status_code=303)
+    mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
+    if not mag:
+        raise HTTPException(status_code=404)
+    return _aplicar_periodo(db, u, mag, mid, intervalo, justificacion, "escalera", "Escalera M4")
+
+
+# ── M2 · CAJA NEGRA ───────────────────────────────────────────────────────────
+
+@router.get("/caja-negra/{mid}", response_class=HTMLResponse)
+def caja_negra_page(mid: int, request: Request, db: Session = Depends(get_db)):
+    u, mag, redir = _cargar_mag_avanzado(mid, request, db)
+    if redir:
+        return redir
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    pv = db.query(models.PlanVerificacion).filter(models.PlanVerificacion.magnitud_id == mid).first()
+    verifs = db.query(models.VerificacionIntermedia).filter(
+        models.VerificacionIntermedia.magnitud_id == mid).all()
+    from utils.caja_negra import analizar_caja_negra
+    analisis = analizar_caja_negra(verifs, ci, pv)
+    return T.TemplateResponse(request, "ilac/caja_negra.html", {
+        "usuario_actual": u, "magnitud": mag, "equipo": mag.equipo,
+        "analisis": analisis, "error": request.query_params.get("error")})
+
+
+@router.post("/caja-negra/{mid}/aplicar")
+def aplicar_caja_negra(mid: int, request: Request, intervalo: int = Form(...),
+                       justificacion: str = Form(""), db: Session = Depends(get_db)):
+    u = auth.obtener_usuario_actual(request, db)
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/ilac/caja-negra/{mid}", status_code=303)
+    mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
+    if not mag:
+        raise HTTPException(status_code=404)
+    return _aplicar_periodo(db, u, mag, mid, intervalo, justificacion, "caja-negra", "Caja negra M2")
+
+
+# ── M3 · HORAS DE USO ─────────────────────────────────────────────────────────
+
+@router.get("/horas/{mid}", response_class=HTMLResponse)
+def horas_page(mid: int, request: Request, db: Session = Depends(get_db)):
+    u, mag, redir = _cargar_mag_avanzado(mid, request, db)
+    if redir:
+        return redir
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    from utils.horas import analizar_horas
+    # Permite previsualizar con parámetros de query (?limite=&acumuladas=&horas_mes=)
+    def _f(name):
+        v = request.query_params.get(name)
+        try:    return float(v) if v not in (None, "") else None
+        except: return None
+    analisis = analizar_horas(ci, _f("limite"), _f("acumuladas"), _f("horas_mes"))
+    return T.TemplateResponse(request, "ilac/horas.html", {
+        "usuario_actual": u, "magnitud": mag, "equipo": mag.equipo,
+        "analisis": analisis, "error": request.query_params.get("error")})
+
+
+@router.post("/horas/{mid}/aplicar")
+def aplicar_horas(mid: int, request: Request,
+                  limite: float = Form(...), acumuladas: float = Form(0),
+                  horas_mes: float = Form(...), intervalo: int = Form(...),
+                  justificacion: str = Form(""), db: Session = Depends(get_db)):
+    u = auth.obtener_usuario_actual(request, db)
+    if not u or u.rol == "solo_lectura":
+        return RedirectResponse(url=f"/ilac/horas/{mid}", status_code=303)
+    mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
+    if not mag:
+        raise HTTPException(status_code=404)
+
+    # Guardar la config de horas en ConfigILAC
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    if not ci:
+        ci = models.ConfigILAC(magnitud_id=mid, intervalo_inicial_meses=12,
+                                 intervalo_actual_meses=12)
+        db.add(ci); db.flush()
+    ci.horas_uso_limite     = limite
+    ci.horas_uso_acumuladas = acumuladas
+    return _aplicar_periodo(db, u, mag, mid, intervalo, justificacion, "horas", "Horas de uso M3")
+
+
+# ── PDFs de los métodos avanzados ─────────────────────────────────────────────
+
+def _stream_pdf_metodo(mag, analisis, metodo, u, db):
+    config = db.query(models.ConfigLaboratorio).first() or models.ConfigLaboratorio()
+    from utils.pdf_metodos import generar_pdf_metodo
+    pdf = generar_pdf_metodo(mag, analisis, metodo, u, config)
+    nombre = f"{metodo}_{mag.nombre}_{date.today().strftime('%Y%m%d')}.pdf"
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={nombre}"})
+
+
+@router.get("/deriva/{mid}/pdf")
+def pdf_deriva(mid: int, request: Request, db: Session = Depends(get_db)):
+    u, mag, redir = _cargar_mag_avanzado(mid, request, db)
+    if redir:
+        return redir
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    from utils.deriva import analizar_deriva
+    return _stream_pdf_metodo(mag, analizar_deriva(mag, ci), "deriva", u, db)
+
+
+@router.get("/escalera/{mid}/pdf")
+def pdf_escalera(mid: int, request: Request, db: Session = Depends(get_db)):
+    u, mag, redir = _cargar_mag_avanzado(mid, request, db)
+    if redir:
+        return redir
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    from utils.escalera import analizar_escalera
+    return _stream_pdf_metodo(mag, analizar_escalera(mag, ci), "escalera", u, db)
+
+
+@router.get("/caja-negra/{mid}/pdf")
+def pdf_caja_negra(mid: int, request: Request, db: Session = Depends(get_db)):
+    u, mag, redir = _cargar_mag_avanzado(mid, request, db)
+    if redir:
+        return redir
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    pv = db.query(models.PlanVerificacion).filter(models.PlanVerificacion.magnitud_id == mid).first()
+    verifs = db.query(models.VerificacionIntermedia).filter(
+        models.VerificacionIntermedia.magnitud_id == mid).all()
+    from utils.caja_negra import analizar_caja_negra
+    return _stream_pdf_metodo(mag, analizar_caja_negra(verifs, ci, pv), "caja-negra", u, db)
+
+
+@router.get("/horas/{mid}/pdf")
+def pdf_horas(mid: int, request: Request, db: Session = Depends(get_db)):
+    u, mag, redir = _cargar_mag_avanzado(mid, request, db)
+    if redir:
+        return redir
+    ci = db.query(models.ConfigILAC).filter(models.ConfigILAC.magnitud_id == mid).first()
+    from utils.horas import analizar_horas
+    def _f(name):
+        v = request.query_params.get(name)
+        try:    return float(v) if v not in (None, "") else None
+        except: return None
+    analisis = analizar_horas(ci, _f("limite"), _f("acumuladas"), _f("horas_mes"))
+    return _stream_pdf_metodo(mag, analisis, "horas", u, db)
 
 
 # ── FRECUENCIAS DE CALIBRACIÓN (vista consolidada) ────────────────────────────
@@ -254,6 +550,27 @@ def frecuencias_page(mid: int, request: Request, db: Session = Depends(get_db)):
     if registros:
         registros[-1]["es_ultima"] = True
 
+    # Método que fijó el período vigente (según la última calibración)
+    _MAP = {
+        'deriva_m1':    ('M1 · Análisis de deriva', 'fa-chart-line',   'deriva',     'avanzado'),
+        'caja-negra':   ('M2 · Caja negra',         'fa-box-archive',  'caja-negra', 'avanzado'),
+        'horas':        ('M3 · Horas de uso',       'fa-clock',        'horas',      'avanzado'),
+        'escalera':     ('M4 · Escalera',           'fa-stairs',       'escalera',   'avanzado'),
+        'estandar':     ('Período estándar',        'fa-calendar-check','periodo',   'estandar'),
+        'ajuste_manual':('Ajuste manual',           'fa-sliders',      'periodo',    'manual'),
+    }
+    metodo_vigente = None
+    ult_cal = calibraciones_raw[-1] if calibraciones_raw else None
+    mp = ult_cal.metodo_periodo if ult_cal else None
+    if mp and mp in _MAP:
+        nombre, icono, ruta, tipo = _MAP[mp]
+        metodo_vigente = {
+            "nombre": nombre, "icono": icono, "ruta": ruta, "tipo": tipo,
+            "intervalo": ci.intervalo_actual_meses if ci else None,
+            "justificacion": ult_cal.justificacion_periodo,
+            "fecha": ult_cal.fecha_calibracion,
+        }
+
     return T.TemplateResponse(request, "ilac/frecuencias.html", {
         "usuario_actual":  u,
         "magnitud":        mag,
@@ -261,6 +578,7 @@ def frecuencias_page(mid: int, request: Request, db: Session = Depends(get_db)):
         "ev":              ev,
         "ci":              ci,
         "registros":       registros,
+        "metodo_vigente":  metodo_vigente,
         "hoy":             date.today(),
         "campos_f_labels": CAMPOS_F_LABELS,
     })

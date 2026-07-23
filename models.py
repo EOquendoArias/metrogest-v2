@@ -12,7 +12,17 @@ class Usuario(Base):
     hashed_password  = Column(String(200), nullable=False)
     rol              = Column(String(30), default="operador")
     activo           = Column(Boolean, default=True)
+    debe_cambiar_password = Column(Boolean, default=False, nullable=False)
     created_at       = Column(DateTime, server_default=func.now())
+
+
+class IntentoLogin(Base):
+    __tablename__ = "intentos_login"
+    id              = Column(Integer, primary_key=True, index=True)
+    email           = Column(String(150), unique=True, index=True, nullable=False)
+    intentos        = Column(Integer, default=0, nullable=False)
+    ultimo_intento  = Column(DateTime, nullable=True)
+    bloqueado_hasta = Column(DateTime, nullable=True)
 
 
 class ConfigLaboratorio(Base):
@@ -145,6 +155,7 @@ class Calibracion(Base):
     costo                    = Column(Float, nullable=True)
     resultado                = Column(String(30), default="pendiente")
     grado_regresion_sel      = Column(Integer, nullable=True)
+    metodo_analisis          = Column(String(20), default="regresion")   # "regresion" | "lagrange"
     usar_incertidumbre       = Column(Boolean, default=True)
     metodo_periodo           = Column(String(30),  nullable=True)
     justificacion_periodo    = Column(Text,        nullable=True)
@@ -332,3 +343,32 @@ class Mantenimiento(Base):
     created_at                 = Column(DateTime, server_default=func.now())
 
     equipo = relationship("Equipo", back_populates="mantenimientos")
+
+
+class ConfigNotificaciones(Base):
+    __tablename__ = "config_notificaciones"
+    id                   = Column(Integer, primary_key=True)
+    email_destinatario   = Column(String(200), nullable=True)
+    # Calibraciones
+    alerta_antes_30      = Column(Boolean, default=True)
+    alerta_antes_15      = Column(Boolean, default=True)
+    alerta_antes_7       = Column(Boolean, default=True)
+    alerta_antes_1       = Column(Boolean, default=True)
+    alerta_dia_0         = Column(Boolean, default=True)
+    alerta_despues_1     = Column(Boolean, default=True)
+    alerta_despues_7     = Column(Boolean, default=True)
+    # Licencia
+    alerta_licencia      = Column(Boolean, default=True)
+    updated_at           = Column(DateTime, default=func.now())
+
+
+class HistorialAlertas(Base):
+    __tablename__ = "historial_alertas"
+    id           = Column(Integer, primary_key=True, index=True)
+    equipo_id    = Column(Integer, ForeignKey("equipos.id"), nullable=False)
+    magnitud_id  = Column(Integer, ForeignKey("magnitudes_equipo.id"), nullable=False)
+    tipo_alerta  = Column(String(20), nullable=False)   # "antes_30", "antes_15", "antes_7", "antes_1", "dia_0", "despues_1", "despues_7"
+    fecha_envio  = Column(DateTime, default=func.now(), nullable=False)
+
+    equipo   = relationship("Equipo")
+    magnitud = relationship("MagnitudEquipo")

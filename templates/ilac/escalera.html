@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Escalera — {{ magnitud.nombre }}{% endblock %}
+{% block page_title %}Método de escalera (M4){% endblock %}
+{% block breadcrumb %}
+  <a href="/equipos/{{ equipo.id }}" style="color:var(--primary);text-decoration:none;">{{ equipo.nombre }}</a> /
+  <a href="/ilac/periodo/{{ magnitud.id }}" style="color:var(--primary);text-decoration:none;">Período</a> /
+  {{ magnitud.nombre }} / Escalera
+{% endblock %}
+
+{% block topbar_actions %}
+{% if analisis.estado != 'insuficiente' %}
+<a href="/ilac/escalera/{{ magnitud.id }}/pdf" class="btn btn-outline btn-sm">
+  <i class="fas fa-file-pdf"></i> PDF
+</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% set estilos = {
+  'insuficiente': ('var(--text-muted)', 'fa-hourglass-half', 'Datos insuficientes'),
+  'sube':         ('var(--success)',    'fa-arrow-trend-up',  'Sube un paso'),
+  'baja':         ('var(--danger)',     'fa-arrow-trend-down','Baja un paso'),
+} %}
+{% set color = estilos[analisis.estado][0] %}
+{% set icono = estilos[analisis.estado][1] %}
+{% set etiqueta = estilos[analisis.estado][2] %}
+
+{% if error == 'justif' %}
+<div class="alert alert-danger" style="margin-bottom:16px;">
+  <i class="fas fa-circle-exclamation"></i> Para un intervalo mayor a 18 meses debes escribir una justificación técnica.
+</div>
+{% endif %}
+
+{# Contexto #}
+<div class="card mb-4"><div class="card-body">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+    {% for lbl, val in [
+      ('Equipo', equipo.nombre), ('Magnitud', magnitud.nombre),
+      ('Calibraciones', analisis.n_calibraciones),
+      ('Período actual', analisis.intervalo_actual|string ~ ' meses')] %}
+    <div style="text-align:center;padding:10px;background:var(--bg-inset);border-radius:8px;">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">{{ lbl }}</div>
+      <div style="font-size:13px;font-weight:700;color:var(--text-strong);margin-top:2px;">{{ val }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div></div>
+
+{% if analisis.estado == 'insuficiente' %}
+<div class="card"><div class="card-body" style="text-align:center;padding:40px 24px;">
+  <i class="fas fa-hourglass-half" style="font-size:42px;color:var(--text-muted);margin-bottom:14px;"></i>
+  <div style="font-size:17px;font-weight:800;color:var(--text-strong);margin-bottom:8px;">Aún no hay datos</div>
+  <div style="font-size:14px;color:var(--text-muted);max-width:480px;margin:0 auto 20px;line-height:1.6;">{{ analisis.mensaje }}</div>
+  <a href="/ilac/periodo/{{ magnitud.id }}" class="btn btn-outline"><i class="fas fa-arrow-left"></i> Volver a las opciones</a>
+</div></div>
+{% else %}
+
+{# Hero recomendación #}
+<div class="card mb-4" style="border:2px solid {{ color }};position:relative;overflow:hidden;">
+  <div style="position:absolute;top:0;left:0;bottom:0;width:6px;background:{{ color }};"></div>
+  <div class="card-body" style="padding:24px 28px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;">
+      <div style="flex:1;min-width:260px;">
+        <div style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:{{ color }};text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;">
+          <i class="fas {{ icono }}"></i> {{ etiqueta }}
+        </div>
+        <div style="font-size:14px;color:var(--text);line-height:1.7;">{{ analisis.mensaje }}</div>
+      </div>
+      <div style="text-align:center;padding:14px 26px;background:var(--bg-inset);border-radius:12px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;">Intervalo recomendado</div>
+        <div style="font-size:44px;font-weight:900;color:{{ color }};line-height:1.1;">{{ analisis.intervalo_sugerido }}</div>
+        <div style="font-size:12px;color:var(--text-muted);">meses</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Escalones: historial de calibraciones #}
+<div class="card mb-4"><div class="card-body">
+  <div style="font-size:14px;font-weight:700;color:var(--text-strong);margin-bottom:4px;">
+    <i class="fas fa-stairs" style="color:{{ color }};margin-right:6px;"></i> Historial de resultados
+  </div>
+  <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+    Cada calibración conforme sube el intervalo; una no conforme lo baja. Paso configurado: {{ analisis.paso_pct }}%.
+  </div>
+  <table class="table" style="font-size:13px;">
+    <thead><tr><th>#</th><th>Fecha</th><th>Resultado</th><th style="text-align:right;">Consumo del EMP</th></tr></thead>
+    <tbody>
+      {% for s in analisis.serie %}
+      <tr>
+        <td style="color:var(--text-muted);">{{ loop.index }}</td>
+        <td>{{ s.fecha.strftime('%d/%m/%Y') }}</td>
+        <td>
+          {% if s.conforme %}
+          <span class="badge" style="background:var(--sem-ok-bg);color:var(--success);"><i class="fas fa-check"></i> Conforme</span>
+          {% else %}
+          <span class="badge" style="background:var(--sem-fail-bg);color:var(--danger);"><i class="fas fa-xmark"></i> No conforme</span>
+          {% endif %}
+        </td>
+        <td style="text-align:right;font-family:monospace;">{{ '%.0f'|format(s.r * 100) }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+
+{% set aplicar_url = '/ilac/escalera/' ~ magnitud.id ~ '/aplicar' %}
+{% include "ilac/_aplicar_avanzado.html" with context %}
+{% endif %}
+
+<style>
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function chkJustif(){
+  var inp=document.getElementById('inp-intervalo'),box=document.getElementById('box-justif'),
+      hint=document.getElementById('hint-justif'),txt=document.getElementById('txt-justif');
+  if(!inp||!box)return;
+  var n=parseInt(inp.value||'0',10)>18;
+  box.style.display=n?'block':'none'; hint.style.display=n?'inline':'none'; if(txt)txt.required=n;
+}
+chkJustif();
+</script>
+{% endblock %}

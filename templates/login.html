@@ -200,16 +200,16 @@
         <label>Correo electrónico</label>
         <div class="iw">
           <i class="fas fa-envelope"></i>
-          <input type="email" name="email" required
-                 placeholder="usuario@empresa.com" autocomplete="email">
+          <input type="email" name="email" id="login-email" required
+                 placeholder="usuario@empresa.com" autocomplete="off">
         </div>
       </div>
       <div class="fg">
         <label>Contraseña</label>
         <div class="iw">
           <i class="fas fa-lock"></i>
-          <input type="password" name="password" required
-                 placeholder="••••••••" autocomplete="current-password">
+          <input type="password" name="password" id="login-password" required
+                 placeholder="••••••••" autocomplete="new-password">
         </div>
       </div>
       <button type="submit" class="btn">
@@ -225,5 +225,20 @@
   </div>
 
 </div>
+<script>
+(function() {
+    // Limpiar campos al cargar — evita que el browser rellene valores guardados
+    var e = document.getElementById('login-email');
+    var p = document.getElementById('login-password');
+    if (e) e.value = '';
+    if (p) p.value = '';
+    // Limpiar también credenciales guardadas en sessionStorage
+    sessionStorage.removeItem('mg_email');
+})();
+
+document.querySelector('form').addEventListener('submit', function() {
+    sessionStorage.setItem('mg_active', '1');
+});
+</script>
 </body>
 </html>

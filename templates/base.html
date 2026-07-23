@@ -510,6 +510,35 @@
 <body>
 
 {% if usuario_actual %}
+<script>
+(function() {
+    if (!sessionStorage.getItem('mg_active')) {
+        window.location.replace('/usuarios/logout');
+    }
+    sessionStorage.setItem('mg_active', '1');
+})();
+</script>
+<div id="mg-inactividad-aviso" style="display:none;position:fixed;inset:0;z-index:9999;
+     background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);
+     align-items:center;justify-content:center;">
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;
+                padding:36px 40px;max-width:400px;width:90%;text-align:center;
+                box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+        <div style="font-size:48px;margin-bottom:12px;">⏱️</div>
+        <div style="font-size:17px;font-weight:700;color:var(--text-strong);margin-bottom:8px;">
+            ¿Sigues ahí?
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:24px;line-height:1.6;">
+            Tu sesión cerrará en <strong style="color:var(--warning)">5 minutos</strong>
+            por inactividad.<br>Haz clic en continuar para seguir trabajando.
+        </div>
+        <button onclick="document.getElementById('mg-inactividad-aviso').style.display='none'"
+                style="background:var(--primary);color:white;border:none;border-radius:8px;
+                       padding:10px 28px;font-size:14px;font-weight:600;cursor:pointer;">
+            Continuar sesión
+        </button>
+    </div>
+</div>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <aside class="sidebar">
@@ -546,6 +575,9 @@
         </a>
         <a href="/config-lab/" class="nav-item {% if '/config-lab' in request.url.path %}active{% endif %}">
             <i class="fas fa-flask"></i> Mi empresa
+        </a>
+        <a href="/notificaciones/" class="nav-item {% if '/notificaciones' in request.url.path %}active{% endif %}">
+            <i class="fas fa-bell"></i> Notificaciones
         </a>
         {% endif %}
     </nav>
@@ -609,6 +641,38 @@
             if (window.innerWidth <= 768) closeSidebar();
         });
     });
+
+    // ── Cierre automático por inactividad (60 min) ────────────────────────
+    {% if usuario_actual %}
+    (function() {
+        const TIMEOUT    = 60 * 60 * 1000; // 60 minutos
+        const AVISO      =  5 * 60 * 1000; // aviso 5 min antes
+        let timerLogout, timerAviso;
+        const aviso = document.getElementById('mg-inactividad-aviso');
+
+        function cerrarAviso() {
+            if (aviso) aviso.style.display = 'none';
+        }
+        function mostrarAviso() {
+            if (aviso) aviso.style.display = 'flex';
+        }
+        function resetTimer() {
+            clearTimeout(timerLogout);
+            clearTimeout(timerAviso);
+            cerrarAviso();
+            timerAviso  = setTimeout(mostrarAviso, TIMEOUT - AVISO);
+            timerLogout = setTimeout(function() {
+                window.location.href = '/usuarios/logout';
+            }, TIMEOUT);
+        }
+
+        ['click','mousemove','keydown','scroll','touchstart'].forEach(function(ev) {
+            document.addEventListener(ev, resetTimer, { passive: true });
+        });
+
+        resetTimer();
+    })();
+    {% endif %}
 
     // ── Tema oscuro/claro ──────────────────────────────────────────────────
     function applyTheme(theme) {

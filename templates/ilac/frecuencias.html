@@ -79,6 +79,40 @@
   </div>
 </div>
 
+{# ── Método del período vigente ─────────────────────────────────────────── #}
+{% if metodo_vigente %}
+{% set _c = 'var(--purple)' if metodo_vigente.tipo == 'avanzado' else 'var(--accent)' if metodo_vigente.tipo == 'manual' else 'var(--primary)' %}
+<div class="card mb-4" style="border-left:4px solid {{ _c }};">
+  <div class="card-body" style="padding:18px 22px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+      <div style="flex:1;min-width:280px;">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">
+          Cómo se definió el período vigente
+        </div>
+        <div style="font-size:16px;font-weight:800;color:{{ _c }};margin-bottom:2px;">
+          <i class="fas {{ metodo_vigente.icono }}" style="margin-right:8px;"></i>{{ metodo_vigente.nombre }}
+          <span style="font-size:14px;color:var(--text);font-weight:600;">
+            → {{ metodo_vigente.intervalo }} meses
+          </span>
+        </div>
+        {% if metodo_vigente.justificacion %}
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.5;">
+          <i class="fas fa-quote-left" style="opacity:0.5;margin-right:4px;"></i>
+          {{ metodo_vigente.justificacion }}
+        </div>
+        {% endif %}
+      </div>
+      <div style="flex-shrink:0;">
+        <a href="/ilac/{{ metodo_vigente.ruta }}/{{ magnitud.id }}" class="btn btn-outline btn-sm"
+           style="border-color:{{ _c }};color:{{ _c }};">
+          <i class="fas fa-magnifying-glass-chart"></i> Ver cómo se calculó
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# ── Línea de tiempo ────────────────────────────────────────────────────── #}
 <div style="display:flex;flex-direction:column;gap:20px;">
 
@@ -432,6 +466,31 @@
               {% elif c.metodo_periodo == 'ajuste_manual' %}
               <div style="font-size:13px;font-weight:700;color:var(--accent);">
                 <i class="fas fa-sliders" style="margin-right:5px;"></i>Ajuste manual — {{ r.intervalo_meses }} meses
+              </div>
+              {% elif c.metodo_periodo == 'deriva_m1' %}
+              <div style="font-size:13px;font-weight:700;color:var(--purple);">
+                <a href="/ilac/deriva/{{ magnitud.id }}" style="color:var(--purple);text-decoration:none;">
+                  <i class="fas fa-chart-line" style="margin-right:5px;"></i>M1 · Análisis de deriva — {{ r.intervalo_meses }} meses</a>
+              </div>
+              {% elif c.metodo_periodo == 'caja-negra' %}
+              <div style="font-size:13px;font-weight:700;color:var(--purple);">
+                <a href="/ilac/caja-negra/{{ magnitud.id }}" style="color:var(--purple);text-decoration:none;">
+                  <i class="fas fa-box-archive" style="margin-right:5px;"></i>M2 · Caja negra — {{ r.intervalo_meses }} meses</a>
+              </div>
+              {% elif c.metodo_periodo == 'horas' %}
+              <div style="font-size:13px;font-weight:700;color:var(--purple);">
+                <a href="/ilac/horas/{{ magnitud.id }}" style="color:var(--purple);text-decoration:none;">
+                  <i class="fas fa-clock" style="margin-right:5px;"></i>M3 · Horas de uso — {{ r.intervalo_meses }} meses</a>
+              </div>
+              {% elif c.metodo_periodo == 'escalera' %}
+              <div style="font-size:13px;font-weight:700;color:var(--purple);">
+                <a href="/ilac/escalera/{{ magnitud.id }}" style="color:var(--purple);text-decoration:none;">
+                  <i class="fas fa-stairs" style="margin-right:5px;"></i>M4 · Escalera — {{ r.intervalo_meses }} meses</a>
+              </div>
+              {% elif c.metodo_periodo == 'evaluacion_riesgo' %}
+              <div style="font-size:13px;font-weight:700;color:var(--primary);">
+                <a href="/ilac/riesgo/{{ magnitud.id }}" style="color:var(--primary);text-decoration:none;">
+                  <i class="fas fa-shield-halved" style="margin-right:5px;"></i>Análisis inicial de riesgo (§5.1) — {{ r.intervalo_meses }} meses</a>
               </div>
               {% else %}
               <div style="font-size:13px;font-weight:700;color:var(--purple);">

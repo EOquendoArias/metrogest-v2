@@ -92,25 +92,73 @@
 
 {% block content %}
 
-{# ── Banner licencia ──────────────────────────────────────────────────── #}
-{% if licencia.vencida %}
-<div class="alert alert-danger" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;">
-  <div style="display:flex;align-items:center;gap:10px;">
-    <i class="fas fa-triangle-exclamation" style="font-size:18px;flex-shrink:0;"></i>
-    <div>
-      <div style="font-weight:700;font-size:14px;">Licencia vencida — modo solo lectura</div>
-      <div style="font-size:12px;opacity:0.8;margin-top:2px;">Contacta a MetroGest para renovar.</div>
+{# ── Banner renovación de licencia (solo admin, solo ≤30 días) ───────── #}
+{% if usuario_actual.rol == 'administrador' and licencia.dias is not none and licencia.dias <= 30 %}
+{% set _d = licencia.dias %}
+{% if _d <= 6 %}
+  {% set _bg     = 'rgba(239,68,68,0.12)'  %}
+  {% set _border = '#ef4444'               %}
+  {% set _color  = '#f87171'               %}
+  {% set _icon   = 'fa-circle-xmark'       %}
+  {% set _label  = 'CRÍTICO'               %}
+{% elif _d <= 14 %}
+  {% set _bg     = 'rgba(249,115,22,0.12)' %}
+  {% set _border = '#f97316'               %}
+  {% set _color  = '#fb923c'               %}
+  {% set _icon   = 'fa-triangle-exclamation' %}
+  {% set _label  = 'URGENTE'              %}
+{% else %}
+  {% set _bg     = 'rgba(245,158,11,0.12)' %}
+  {% set _border = '#f59e0b'               %}
+  {% set _color  = '#fbbf24'               %}
+  {% set _icon   = 'fa-clock'              %}
+  {% set _label  = 'AVISO'                %}
+{% endif %}
+{% set _empresa = licencia.cliente | urlencode if licencia.cliente else '' %}
+{% set _wa_url  = 'https://wa.me/573167527686?text=Hola%2C+quiero+renovar+mi+licencia+MetroGest.+Empresa%3A+' ~ _empresa %}
+<div id="mg-lic-banner"
+     style="display:flex;align-items:center;justify-content:space-between;gap:14px;
+            padding:14px 18px;border-radius:var(--radius-sm);margin-bottom:20px;
+            background:{{ _bg }};border:1px solid {{ _border }};
+            animation:mg-fadein .3s ease;">
+  <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+    <i class="fas {{ _icon }}" style="font-size:20px;color:{{ _color }};flex-shrink:0;"></i>
+    <div style="min-width:0;">
+      <div style="font-weight:700;font-size:14px;color:{{ _color }};">
+        [{{ _label }}] Licencia por vencer
+        <span style="font-weight:400;font-size:13px;color:var(--text);">
+          — {{ _d }} día{% if _d != 1 %}s{% endif %} restante{% if _d != 1 %}s{% endif %}
+          · vence el <strong>{{ licencia.vence }}</strong>
+        </span>
+      </div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">
+        Renueva antes de esa fecha para evitar interrupciones en el sistema.
+      </div>
     </div>
   </div>
-  <a href="mailto:soporte@metrogest.com" class="btn btn-danger btn-sm" style="flex-shrink:0;">
-    <i class="fas fa-headset"></i> Renovar
-  </a>
+  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+    <a href="{{ _wa_url }}" target="_blank" rel="noopener"
+       style="display:inline-flex;align-items:center;gap:7px;
+              padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;
+              background:#25d366;color:#fff;text-decoration:none;white-space:nowrap;">
+      <i class="fab fa-whatsapp" style="font-size:16px;"></i> Renovar por WhatsApp
+    </a>
+    <button onclick="document.getElementById('mg-lic-banner').style.display='none';
+                     sessionStorage.setItem('mg_lic_banner_closed','1');"
+            title="Cerrar (reaparece al próximo login)"
+            style="background:none;border:none;cursor:pointer;padding:6px;
+                   color:var(--text-muted);font-size:16px;line-height:1;border-radius:6px;"
+            onmouseover="this.style.color=getComputedStyle(document.documentElement).getPropertyValue('--text')"
+            onmouseout="this.style.color=getComputedStyle(document.documentElement).getPropertyValue('--text-muted')">
+      <i class="fas fa-xmark"></i>
+    </button>
+  </div>
 </div>
-{% elif licencia.dias is not none and licencia.dias <= 15 %}
-<div class="alert alert-warning" style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
-  <i class="fas fa-clock" style="flex-shrink:0;"></i>
-  <div style="font-size:13px;"><strong>Tu licencia vence en {{ licencia.dias }} días</strong> ({{ licencia.vence }}).</div>
-</div>
+<script>
+if (sessionStorage.getItem('mg_lic_banner_closed') === '1') {
+  document.getElementById('mg-lic-banner').style.display = 'none';
+}
+</script>
 {% endif %}
 
 {# ── Banner de alarmas ────────────────────────────────────────────────── #}

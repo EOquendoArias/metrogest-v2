@@ -22,6 +22,18 @@
 </div>
 
 {% if ev %}
+<div class="infobox {% if requiere_confirmacion %}infobox-amber{% else %}infobox-blue{% endif %}" style="line-height:1.7;">
+  <strong><i class="fas fa-lock"></i> Registro de la calibración inicial:</strong>
+  Este análisis §5.1 ya está registrado y define el <strong>intervalo inicial</strong>. Normalmente
+  <strong>no debe modificarse</strong> — las frecuencias posteriores se ajustan con los métodos M1–M4 sin tocar este dato.
+  Para cambiarlo, marca la casilla de confirmación al final.
+  {% if requiere_confirmacion %}
+  <div style="margin-top:8px;color:var(--danger);font-weight:700;">
+    <i class="fas fa-circle-exclamation"></i> No se guardó: debes marcar la casilla de confirmación para modificar el registro inicial.
+  </div>
+  {% endif %}
+</div>
+
 <div class="infobox infobox-blue" style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
   <div style="text-align:center;">
     <div style="font-size:36px;font-weight:800;color:var(--primary);">{{ ev.intervalo_sugerido_meses }}</div>
@@ -122,7 +134,18 @@
         <textarea name="justificacion" class="form-control" rows="3"
                   placeholder="Fundamento técnico para el intervalo adoptado...">{{ ev.justificacion if ev else '' }}</textarea>
       </div>
-      <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar evaluación de riesgo</button>
+      {% if ev %}
+      <div style="margin:14px 0;padding:12px 14px;background:var(--sem-fail-bg);border:1px solid var(--sem-fail-border);border-radius:8px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text-strong);">
+          <input type="checkbox" name="confirmar_edicion" value="si" id="chk-confirmar" onchange="toggleGuardar()">
+          Confirmo que deseo modificar el registro de la calibración inicial (§5.1).
+        </label>
+      </div>
+      {% endif %}
+      <button type="submit" id="btn-guardar" class="btn btn-primary"
+              {% if ev %}disabled style="opacity:0.5;cursor:not-allowed;"{% endif %}>
+        <i class="fas fa-save"></i> Guardar evaluación de riesgo
+      </button>
     </div>
   </div>
 </form>
@@ -148,6 +171,16 @@ function calcular(){
 }
 document.addEventListener('DOMContentLoaded',calcular);
 document.querySelector('[name=intervalo_fabricante_meses]')?.addEventListener('input',calcular);
+
+// Habilita "Guardar" solo cuando se confirma la edición del registro inicial
+function toggleGuardar(){
+  var chk=document.getElementById('chk-confirmar');
+  var btn=document.getElementById('btn-guardar');
+  if(!chk||!btn)return;
+  btn.disabled=!chk.checked;
+  btn.style.opacity=chk.checked?'1':'0.5';
+  btn.style.cursor=chk.checked?'pointer':'not-allowed';
+}
 </script>
 {% endblock %}
 {% endblock %}

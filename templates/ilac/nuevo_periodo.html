@@ -133,22 +133,33 @@
         Análisis técnico avanzado — ILAC-G24
       </div>
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
-        Calcula el período óptimo usando metodologías técnicas basadas en deriva,
-        horas de uso y verificaciones intermedias. Requiere datos históricos.
+        Calcula el período óptimo con metodologías técnicas ILAC-G24. Elige el método
+        según los datos que tengas. Puede sugerir hasta 60 meses (con justificación arriba de 18).
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <a href="/ilac/riesgo/{{ magnitud.id }}?metodo=m1m2" class="btn btn-outline"
-           style="border-color:var(--purple);color:var(--purple);">
-          <i class="fas fa-chart-line"></i> M1/M2 — Análisis de deriva
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+        {% for url, ic, titulo, desc in [
+          ('deriva',     'fa-chart-line',   'M1 — Deriva',      'Ritmo con que el error se acerca al EMP en el tiempo'),
+          ('caja-negra', 'fa-box-archive',  'M2 — Caja negra',  'Usa las verificaciones intermedias como evidencia'),
+          ('horas',      'fa-clock',        'M3 — Horas de uso','Calibrar por horas de operación, no por calendario'),
+          ('escalera',   'fa-stairs',       'M4 — Escalera',    'Sube o baja el período según pase o falle la calibración'),
+        ] %}
+        <a href="/ilac/{{ url }}/{{ magnitud.id }}"
+           style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;
+                  border:1.5px solid var(--border);border-radius:10px;text-decoration:none;
+                  transition:border-color .15s;background:var(--bg-inset);"
+           onmouseover="this.style.borderColor='var(--purple)'"
+           onmouseout="this.style.borderColor='var(--border)'">
+          <div style="width:34px;height:34px;border-radius:8px;flex-shrink:0;
+                      background:rgba(167,139,250,0.15);color:var(--purple);
+                      display:flex;align-items:center;justify-content:center;font-size:15px;">
+            <i class="fas {{ ic }}"></i>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text-strong);">{{ titulo }}</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.4;margin-top:2px;">{{ desc }}</div>
+          </div>
         </a>
-        <a href="/ilac/riesgo/{{ magnitud.id }}?metodo=m3" class="btn btn-outline"
-           style="border-color:var(--purple);color:var(--purple);">
-          <i class="fas fa-clock"></i> M3 — Horas de uso
-        </a>
-        <a href="/ilac/riesgo/{{ magnitud.id }}?metodo=m4" class="btn btn-outline"
-           style="border-color:var(--purple);color:var(--purple);">
-          <i class="fas fa-check-double"></i> M4 — Verificaciones intermedias
-        </a>
+        {% endfor %}
       </div>
     </div>
   </div>
