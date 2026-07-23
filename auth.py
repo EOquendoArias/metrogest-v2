@@ -1,11 +1,18 @@
 import bcrypt, os, secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import Request
 from sqlalchemy.orm import Session
 import models
 
-MAX_INTENTOS    = 5
-BLOQUEO_MINUTOS = 15
+MAX_INTENTOS_CUENTA = 5    # por (email, ip) — bloquear solo esa combinación
+MAX_INTENTOS_IP     = 20   # por ip, sin importar qué cuenta se intente
+BLOQUEO_MINUTOS     = 15
+
+
+def _ahora_utc() -> datetime:
+    """datetime.utcnow() está deprecado desde Python 3.12; esto es el
+    equivalente naive-UTC (la columna en BD es DateTime sin tz)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 def hash_password(p: str) -> str:
     return bcrypt.hashpw(p.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -37,44 +44,78 @@ def crear_admin_inicial(db: Session):
         print(f"\n  ⚠ Admin creado: admin@metrogest.com / {temp}")
         print("  Contraseña temporal — se pedirá cambiarla en el primer login.\n")
 
-def esta_bloqueado(email: str, db: Session) -> tuple[bool, int]:
-    """Devuelve (bloqueado, minutos_restantes)."""
+def esta_bloqueado(email: str, ip: str, db: Session) -> tuple[bool, int]:
+    """
+    Devuelve (bloqueado, minutos_restantes). Revisa dos límites independientes
+    — el que esté bloqueado (o el que dure más) manda:
+      - por (email, ip): evita que alguien bloquee la cuenta de otra persona
+        solo sabiendo su correo, desde afuera — la víctima sigue pudiendo
+        entrar desde su propia IP.
+      - por ip (cualquier cuenta): evita que una sola IP pruebe muchas
+        cuentas distintas (spray / credential stuffing).
+    """
+    ahora = _ahora_utc()
+    minutos = 0
+
     registro = db.query(models.IntentoLogin).filter(
-        models.IntentoLogin.email == email).first()
-    if not registro or not registro.bloqueado_hasta:
-        return False, 0
-    ahora = datetime.utcnow()
-    if registro.bloqueado_hasta > ahora:
-        minutos = int((registro.bloqueado_hasta - ahora).total_seconds() / 60) + 1
-        return True, minutos
-    # Bloqueo expirado — limpiar
-    registro.intentos = 0
-    registro.bloqueado_hasta = None
-    db.commit()
-    return False, 0
+        models.IntentoLogin.email == email, models.IntentoLogin.ip == ip).first()
+    if registro and registro.bloqueado_hasta:
+        if registro.bloqueado_hasta > ahora:
+            minutos = max(minutos, int((registro.bloqueado_hasta - ahora).total_seconds() / 60) + 1)
+        else:
+            registro.intentos = 0
+            registro.bloqueado_hasta = None
+            db.commit()
+
+    registro_ip = db.query(models.IntentoLoginIP).filter(models.IntentoLoginIP.ip == ip).first()
+    if registro_ip and registro_ip.bloqueado_hasta:
+        if registro_ip.bloqueado_hasta > ahora:
+            minutos = max(minutos, int((registro_ip.bloqueado_hasta - ahora).total_seconds() / 60) + 1)
+        else:
+            registro_ip.intentos = 0
+            registro_ip.bloqueado_hasta = None
+            db.commit()
+
+    return minutos > 0, minutos
 
 
-def registrar_fallo(email: str, db: Session) -> tuple[bool, int]:
-    """Incrementa el contador. Devuelve (bloqueado_ahora, minutos_bloqueo)."""
+def registrar_fallo(email: str, ip: str, db: Session) -> tuple[bool, int]:
+    """Incrementa ambos contadores (cuenta+ip e ip global). Devuelve
+    (bloqueado_ahora, minutos_bloqueo) según cuál de los dos disparó."""
+    ahora = _ahora_utc()
+    bloqueado_ahora = False
+
     registro = db.query(models.IntentoLogin).filter(
-        models.IntentoLogin.email == email).first()
+        models.IntentoLogin.email == email, models.IntentoLogin.ip == ip).first()
     if not registro:
-        registro = models.IntentoLogin(email=email)
+        registro = models.IntentoLogin(email=email, ip=ip)
         db.add(registro)
     registro.intentos = (registro.intentos or 0) + 1
-    registro.ultimo_intento = datetime.utcnow()
-    if registro.intentos >= MAX_INTENTOS:
-        registro.bloqueado_hasta = datetime.utcnow() + timedelta(minutes=BLOQUEO_MINUTOS)
-        db.commit()
-        return True, BLOQUEO_MINUTOS
+    registro.ultimo_intento = ahora
+    if registro.intentos >= MAX_INTENTOS_CUENTA:
+        registro.bloqueado_hasta = ahora + timedelta(minutes=BLOQUEO_MINUTOS)
+        bloqueado_ahora = True
+
+    registro_ip = db.query(models.IntentoLoginIP).filter(models.IntentoLoginIP.ip == ip).first()
+    if not registro_ip:
+        registro_ip = models.IntentoLoginIP(ip=ip)
+        db.add(registro_ip)
+    registro_ip.intentos = (registro_ip.intentos or 0) + 1
+    registro_ip.ultimo_intento = ahora
+    if registro_ip.intentos >= MAX_INTENTOS_IP:
+        registro_ip.bloqueado_hasta = ahora + timedelta(minutes=BLOQUEO_MINUTOS)
+        bloqueado_ahora = True
+
     db.commit()
-    return False, 0
+    return bloqueado_ahora, BLOQUEO_MINUTOS
 
 
-def resetear_intentos(email: str, db: Session) -> None:
-    """Limpia el contador al autenticar con éxito."""
+def resetear_intentos(email: str, ip: str, db: Session) -> None:
+    """Limpia el contador de (email, ip) al autenticar con éxito. El contador
+    global por IP no se toca — un acierto en una cuenta no debe borrar el
+    historial de abuso de esa IP contra otras cuentas."""
     registro = db.query(models.IntentoLogin).filter(
-        models.IntentoLogin.email == email).first()
+        models.IntentoLogin.email == email, models.IntentoLogin.ip == ip).first()
     if registro:
         registro.intentos = 0
         registro.bloqueado_hasta = None

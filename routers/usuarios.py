@@ -17,13 +17,14 @@ def login_page(request: Request):
 @router.post("/login")
 def login(request: Request, email: str = Form(...),
           password: str = Form(...), db: Session = Depends(get_db)):
+    ip = request.client.host if request.client else ""
 
     # 0. Rate limiting — verificar bloqueo antes de cualquier intento
-    bloqueado, minutos = auth.esta_bloqueado(email, db)
+    bloqueado, minutos = auth.esta_bloqueado(email, ip, db)
     if bloqueado:
         mins = f"{minutos} minuto{'s' if minutos != 1 else ''}"
         return T.TemplateResponse(request, "login.html",
-            {"error": f"Cuenta bloqueada por múltiples intentos fallidos. Intenta de nuevo en {mins}."})
+            {"error": f"Demasiados intentos fallidos. Intenta de nuevo en {mins}."})
 
     # 1. Intento normal con credenciales del usuario
     u = db.query(models.Usuario).filter(
@@ -32,20 +33,20 @@ def login(request: Request, email: str = Form(...),
     ).first()
 
     if u and auth.verificar_password(password, u.hashed_password):
-        auth.resetear_intentos(email, db)
+        auth.resetear_intentos(email, ip, db)
         request.session["user_id"] = u.id
         if u.debe_cambiar_password:
             return RedirectResponse(url="/usuarios/cambiar-password-inicial", status_code=302)
         return RedirectResponse(url="/dashboard/", status_code=302)
 
     # 2. Credenciales incorrectas — registrar fallo y construir mensaje
-    bloqueado_ahora, mins_bloqueo = auth.registrar_fallo(email, db)
+    bloqueado_ahora, mins_bloqueo = auth.registrar_fallo(email, ip, db)
     if bloqueado_ahora:
-        error = f"Demasiados intentos fallidos. Cuenta bloqueada por {mins_bloqueo} minutos."
+        error = f"Demasiados intentos fallidos. Intenta de nuevo en {mins_bloqueo} minutos."
     else:
         registro = db.query(models.IntentoLogin).filter(
-            models.IntentoLogin.email == email).first()
-        restantes = auth.MAX_INTENTOS - (registro.intentos if registro else 1)
+            models.IntentoLogin.email == email, models.IntentoLogin.ip == ip).first()
+        restantes = auth.MAX_INTENTOS_CUENTA - (registro.intentos if registro else 1)
         intento_txt = f"intento{'s' if restantes != 1 else ''}"
         error = f"Correo o contraseña incorrectos. Te queda{'n' if restantes != 1 else ''} {restantes} {intento_txt}."
 

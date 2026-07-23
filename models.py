@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, Text, ForeignKey, and_
+from sqlalchemy import (Column, Integer, String, Float, Boolean, Date, DateTime, Text,
+                         ForeignKey, and_, UniqueConstraint)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -17,9 +18,32 @@ class Usuario(Base):
 
 
 class IntentoLogin(Base):
+    """
+    Bloqueo por (email, ip) — no solo por email. Un bloqueo por email a
+    secas permite que cualquiera que conozca el correo de otra persona la
+    bloquee 15 minutos, indefinidamente, sin saber la contraseña (DoS de
+    cuenta). Con la clave compuesta, un atacante solo bloquea su propia
+    combinación de IP+cuenta; la víctima sigue pudiendo entrar desde su IP.
+    Ver también IntentoLoginIP para el límite global por IP (spray/credential
+    stuffing contra muchas cuentas).
+    """
     __tablename__ = "intentos_login"
+    __table_args__ = (UniqueConstraint("email", "ip", name="uq_intentos_login_email_ip"),)
     id              = Column(Integer, primary_key=True, index=True)
-    email           = Column(String(150), unique=True, index=True, nullable=False)
+    email           = Column(String(150), index=True, nullable=False)
+    ip              = Column(String(45), nullable=False, default="")
+    intentos        = Column(Integer, default=0, nullable=False)
+    ultimo_intento  = Column(DateTime, nullable=True)
+    bloqueado_hasta = Column(DateTime, nullable=True)
+
+
+class IntentoLoginIP(Base):
+    """Límite global por IP, independiente de qué cuenta se intente — evita
+    que una sola IP pruebe muchas cuentas distintas (spray/credential
+    stuffing) sin quedar nunca bloqueada por el límite de IntentoLogin."""
+    __tablename__ = "intentos_login_ip"
+    id              = Column(Integer, primary_key=True, index=True)
+    ip              = Column(String(45), unique=True, index=True, nullable=False)
     intentos        = Column(Integer, default=0, nullable=False)
     ultimo_intento  = Column(DateTime, nullable=True)
     bloqueado_hasta = Column(DateTime, nullable=True)

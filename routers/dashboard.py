@@ -2,7 +2,7 @@
 Dashboard — Panel de control principal de MetroGest
 """
 import io
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -38,7 +38,7 @@ _cache = {"datos": None, "hoy": None, "expira": None}
 
 
 def _calcular_datos_cacheado(db: Session, hoy: date) -> dict:
-    ahora = datetime.utcnow()
+    ahora = datetime.now(timezone.utc)
     if (_cache["datos"] is not None and _cache["hoy"] == hoy
             and _cache["expira"] and ahora < _cache["expira"]):
         return _cache["datos"]
