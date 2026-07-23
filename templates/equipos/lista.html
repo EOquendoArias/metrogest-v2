@@ -154,90 +154,66 @@
 
 {% block content %}
 
-{# ── Calcular métricas ────────────────────────────────────────────────── #}
-{% set total      = equipos|length %}
-{% set operativos = equipos|selectattr('estado','equalto','operativo')|list|length %}
-{% set venc_list  = [] %}
-{% set prox_list  = [] %}
-{% for eq in equipos %}
-  {% for mag in eq.magnitudes %}{% if mag.activa and mag.calibraciones %}
-    {% set ul = mag.calibraciones|sort(attribute='fecha_calibracion')|last %}
-    {% if ul.proxima_calibracion %}
-      {% if (ul.proxima_calibracion - hoy).days < 0   %}{% set _ = venc_list.append(1) %}
-      {% elif (ul.proxima_calibracion - hoy).days <= 30 %}{% set _ = prox_list.append(1) %}{% endif %}
-    {% endif %}
-  {% endif %}{% endfor %}
-{% endfor %}
-
-{# ── Barra de estadísticas ────────────────────────────────────────────── #}
+{# ── Barra de estadísticas (totales globales del inventario, no del filtro activo) ── #}
 <div class="stat-bar">
   <div class="stat-pill">
-    <div class="stat-pill-num" style="color:var(--primary);">{{ total }}</div>
+    <div class="stat-pill-num" style="color:var(--primary);">{{ total_general }}</div>
     <div class="stat-pill-lbl">Total</div>
   </div>
   <div class="stat-pill">
-    <div class="stat-pill-num" style="color:var(--success);">{{ operativos }}</div>
+    <div class="stat-pill-num" style="color:var(--success);">{{ operativos_general }}</div>
     <div class="stat-pill-lbl">Operativos</div>
   </div>
-  {% if venc_list %}
+  {% if venc_general %}
   <div class="stat-pill" style="border-color:rgba(239,68,68,0.3);">
     <i class="fas fa-circle-xmark" style="color:var(--danger);font-size:18px;"></i>
     <div>
-      <div class="stat-pill-num" style="color:var(--danger);">{{ venc_list|length }}</div>
+      <div class="stat-pill-num" style="color:var(--danger);">{{ venc_general }}</div>
       <div class="stat-pill-lbl">Cal. vencidas</div>
     </div>
   </div>
   {% endif %}
-  {% if prox_list %}
+  {% if prox_general %}
   <div class="stat-pill" style="border-color:rgba(245,158,11,0.3);">
     <i class="fas fa-clock" style="color:var(--warning);font-size:18px;"></i>
     <div>
-      <div class="stat-pill-num" style="color:var(--warning);">{{ prox_list|length }}</div>
+      <div class="stat-pill-num" style="color:var(--warning);">{{ prox_general }}</div>
       <div class="stat-pill-lbl">Próximas ≤30d</div>
     </div>
   </div>
   {% endif %}
   <div style="margin-left:auto;">
-    <span style="font-size:12px;color:var(--text-muted);">{{ total }} equipo(s) registrado(s)</span>
+    <span style="font-size:12px;color:var(--text-muted);">{{ total_filtrado }} equipo(s) {% if q or estado_filtro or cal_filtro %}encontrado(s){% else %}registrado(s){% endif %}</span>
   </div>
 </div>
 
-{# ── Filtros ──────────────────────────────────────────────────────────── #}
-{% if equipos %}
-<div class="filters-bar">
-  <div class="search-wrap">
-    <i class="fas fa-magnifying-glass"></i>
-    <input type="text" class="search-input" id="eq-search"
-           placeholder="Buscar por nombre, código o área…" oninput="applyFilters()">
+{# ── Filtros (server-side: cada cambio recarga la página con los query params) ── #}
+<form method="get" action="/equipos/" id="filtros-form">
+  <input type="hidden" name="cal" id="cal-input" value="{{ cal_filtro }}">
+  <input type="hidden" name="estado" id="estado-input" value="{{ estado_filtro }}">
+  <div class="filters-bar">
+    <div class="search-wrap">
+      <i class="fas fa-magnifying-glass"></i>
+      <input type="text" name="q" class="search-input" id="eq-search"
+             placeholder="Buscar por nombre, código o área…" value="{{ q }}">
+    </div>
+    <div class="filter-chips" id="filter-chips">
+      <span class="f-chip {% if not cal_filtro and not estado_filtro %}active{% endif %}" onclick="setFiltro('','')">Todos</span>
+      <span class="f-chip {% if estado_filtro=='operativo' %}active-success{% endif %}" onclick="setFiltro('estado','operativo')">Operativo</span>
+      <span class="f-chip {% if cal_filtro=='vencida' %}active-danger{% endif %}" onclick="setFiltro('cal','vencida')">Cal. vencida</span>
+      <span class="f-chip {% if cal_filtro=='proxima' %}active-warning{% endif %}" onclick="setFiltro('cal','proxima')">Próxima ≤30d</span>
+      <span class="f-chip {% if cal_filtro=='sin_cal' %}active{% endif %}" onclick="setFiltro('cal','sin_cal')">Sin calibración</span>
+    </div>
   </div>
-  <div class="filter-chips" id="filter-chips">
-    <span class="f-chip active" data-filter="all" onclick="setChip(this,'active')">Todos</span>
-    <span class="f-chip" data-filter="operativo" onclick="setChip(this,'active-success')">Operativo</span>
-    <span class="f-chip" data-filter="vencida"   onclick="setChip(this,'active-danger')">Cal. vencida</span>
-    <span class="f-chip" data-filter="proxima"   onclick="setChip(this,'active-warning')">Próxima ≤30d</span>
-    <span class="f-chip" data-filter="sin_cal"   onclick="setChip(this,'active')">Sin calibración</span>
-  </div>
-</div>
-{% endif %}
+</form>
 
-{# ── Grid de equipos ──────────────────────────────────────────────────── #}
+{# ── Grid de equipos (solo la página actual) ───────────────────────────── #}
 {% if equipos %}
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px;" id="eq-grid">
   {% for eq in equipos %}
 
-  {# Calcular próxima calibración #}
-  {% set prox_cal = namespace(fecha=none, dias=none) %}
-  {% for mag in eq.magnitudes %}
-    {% if mag.activa and mag.calibraciones %}
-      {% set ul = mag.calibraciones|sort(attribute='fecha_calibracion')|last %}
-      {% if ul.proxima_calibracion %}
-        {% if prox_cal.fecha is none or ul.proxima_calibracion < prox_cal.fecha %}
-          {% set prox_cal.fecha = ul.proxima_calibracion %}
-          {% set prox_cal.dias  = (ul.proxima_calibracion - hoy).days %}
-        {% endif %}
-      {% endif %}
-    {% endif %}
-  {% endfor %}
+  {% set prox_fecha = proximas.get(eq.id) %}
+  {% set prox_cal = namespace(fecha=prox_fecha, dias=((prox_fecha - hoy).days if prox_fecha else none)) %}
 
   {# Color de acento según estado #}
   {% set accent_color = {
@@ -258,20 +234,7 @@
     'dado_de_baja':          'secondary',
   }.get(eq.estado, 'secondary') %}
 
-  {# Categoría de calibración para el filtro #}
-  {% if prox_cal.fecha %}
-    {% if prox_cal.dias < 0 %}{% set cal_cat = 'vencida' %}
-    {% elif prox_cal.dias <= 30 %}{% set cal_cat = 'proxima' %}
-    {% else %}{% set cal_cat = 'ok' %}{% endif %}
-  {% else %}{% set cal_cat = 'sin_cal' %}{% endif %}
-
-  <div class="eq-card"
-       onclick="window.location='/equipos/{{ eq.id }}'"
-       data-nombre="{{ eq.nombre|lower }}"
-       data-codigo="{{ eq.codigo|lower }}"
-       data-area="{{ (eq.area or '')|lower }}"
-       data-estado="{{ eq.estado }}"
-       data-cal="{{ cal_cat }}">
+  <div class="eq-card" onclick="window.location='/equipos/{{ eq.id }}'">
     <div class="eq-card-accent" style="background:{{ accent_color }};"></div>
     <div class="eq-card-body">
 
@@ -338,20 +301,42 @@
   {% endfor %}
 </div>
 
-<div class="no-results" id="no-results">
-  <i class="fas fa-filter-circle-xmark"></i>
-  <p>No hay equipos que coincidan con los filtros seleccionados.</p>
+{# ── Paginación ─────────────────────────────────────────────────────────── #}
+{% if total_paginas > 1 %}
+<div style="display:flex;justify-content:center;align-items:center;gap:14px;margin-top:24px;">
+  {% set qs = '&q=' + (q|urlencode) if q else '' %}
+  {% set qs = qs + '&estado=' + estado_filtro if estado_filtro else qs %}
+  {% set qs = qs + '&cal=' + cal_filtro if cal_filtro else qs %}
+  <a href="/equipos/?page={{ page - 1 }}{{ qs }}"
+     class="btn btn-sm {% if page <= 1 %}disabled{% endif %}"
+     style="{% if page <= 1 %}pointer-events:none;opacity:0.4;{% endif %}">
+    <i class="fas fa-chevron-left"></i> Anterior
+  </a>
+  <span style="font-size:13px;color:var(--text-muted);">Página {{ page }} de {{ total_paginas }}</span>
+  <a href="/equipos/?page={{ page + 1 }}{{ qs }}"
+     class="btn btn-sm {% if page >= total_paginas %}disabled{% endif %}"
+     style="{% if page >= total_paginas %}pointer-events:none;opacity:0.4;{% endif %}">
+    Siguiente <i class="fas fa-chevron-right"></i>
+  </a>
 </div>
+{% endif %}
 
 {% else %}
 <div class="card">
   <div class="empty-state">
+    {% if q or estado_filtro or cal_filtro %}
+    <i class="fas fa-filter-circle-xmark"></i>
+    <h3>Sin resultados</h3>
+    <p>No hay equipos que coincidan con los filtros seleccionados.</p>
+    <a href="/equipos/" class="btn btn-primary" style="margin-top:20px;">Quitar filtros</a>
+    {% else %}
     <i class="fas fa-ruler-combined"></i>
     <h3>Sin equipos registrados</h3>
     <p>Agrega tu primer equipo para comenzar el control metrológico.</p>
     <a href="/equipos/nuevo" class="btn btn-primary" style="margin-top:20px;">
       <i class="fas fa-plus"></i> Agregar primer equipo
     </a>
+    {% endif %}
   </div>
 </div>
 {% endif %}
@@ -360,44 +345,17 @@
 
 {% block scripts %}
 <script>
-  let activeChip = 'all';
-  let activeClass = 'active';
-
-  function setChip(el, cls) {
-    document.querySelectorAll('#filter-chips .f-chip').forEach(c => {
-      c.classList.remove('active','active-danger','active-warning','active-success');
-    });
-    el.classList.add(cls);
-    activeChip  = el.dataset.filter;
-    activeClass = cls;
-    applyFilters();
+  function setFiltro(tipo, valor) {
+    document.getElementById('cal-input').value = tipo === 'cal' ? valor : '';
+    document.getElementById('estado-input').value = tipo === 'estado' ? valor : '';
+    document.getElementById('filtros-form').submit();
   }
 
-  function applyFilters() {
-    const q     = document.getElementById('eq-search').value.toLowerCase().trim();
-    const cards = document.querySelectorAll('#eq-grid .eq-card');
-    let visible = 0;
-
-    cards.forEach(card => {
-      const matchText =
-        !q ||
-        card.dataset.nombre.includes(q) ||
-        card.dataset.codigo.includes(q) ||
-        card.dataset.area.includes(q);
-
-      const matchChip =
-        activeChip === 'all'      ? true :
-        activeChip === 'operativo'? card.dataset.estado === 'operativo' :
-        activeChip === 'vencida'  ? card.dataset.cal    === 'vencida'   :
-        activeChip === 'proxima'  ? card.dataset.cal    === 'proxima'   :
-        activeChip === 'sin_cal'  ? card.dataset.cal    === 'sin_cal'   : true;
-
-      const show = matchText && matchChip;
-      card.style.display = show ? '' : 'none';
-      if (show) visible++;
-    });
-
-    document.getElementById('no-results').style.display = visible === 0 && cards.length > 0 ? 'block' : 'none';
-  }
+  // Auto-enviar la búsqueda tras una pausa al escribir (evita recargar en cada tecla)
+  let searchTimer = null;
+  document.getElementById('eq-search').addEventListener('input', function() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => document.getElementById('filtros-form').submit(), 500);
+  });
 </script>
 {% endblock %}

@@ -4,15 +4,19 @@ from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Request, Form, File, UploadFile, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, selectinload
 from database import get_db
 import models, auth
+from utils.calculos import proxima_calibracion_por_equipo
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
 
 ESTADOS = ["en_espera_calibracion","operativo","en_calibracion",
            "en_mantenimiento","fuera_de_uso","dado_de_baja"]
+
+PAGE_SIZE = 30
 
 def _prox(eq):
     fechas = []
@@ -82,13 +86,67 @@ def _historial_unificado(eq):
             for k, v in d.items(): setattr(self, k, v)
     return [Ev(e) for e in eventos]
 
+def _categoria_cal(pc, hoy):
+    if not pc: return "sin_cal"
+    dias = (pc - hoy).days
+    if dias < 0: return "vencida"
+    if dias <= 30: return "proxima"
+    return "ok"
+
 @router.get("/", response_class=HTMLResponse)
-def lista(request: Request, db: Session = Depends(get_db)):
+def lista(request: Request, db: Session = Depends(get_db),
+          page: int = 1, q: str = "", estado: str = "", cal: str = ""):
     u = auth.obtener_usuario_actual(request, db)
     if not u: return RedirectResponse(url="/usuarios/login")
-    equipos = db.query(models.Equipo).order_by(models.Equipo.nombre).all()
-    return T.TemplateResponse(request, "equipos/lista.html",
-        {"usuario_actual": u, "equipos": equipos, "hoy": date.today()})
+
+    hoy = date.today()
+    # Próxima calibración por equipo — una consulta agregada para TODO el inventario,
+    # en vez de recorrer magnitudes/calibraciones de cada equipo en Python (N+1).
+    proximas = proxima_calibracion_por_equipo(db)
+
+    # Totales globales para la barra de estadísticas (no dependen del filtro activo)
+    total_general = db.query(models.Equipo).count()
+    operativos_general = db.query(models.Equipo).filter(models.Equipo.estado == "operativo").count()
+    venc_general = sum(1 for pc in proximas.values() if pc and (pc - hoy).days < 0)
+    prox_general = sum(1 for pc in proximas.values() if pc and 0 <= (pc - hoy).days <= 30)
+
+    # Filtro de texto/estado en SQL
+    query = db.query(models.Equipo.id)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(models.Equipo.nombre.ilike(like),
+                                  models.Equipo.codigo.ilike(like),
+                                  models.Equipo.area.ilike(like)))
+    if estado:
+        query = query.filter(models.Equipo.estado == estado)
+    ids_candidatos = [eid for (eid,) in query.all()]
+
+    # Filtro de calibración (derivado) — se aplica sobre los ids ya filtrados por texto/estado
+    if cal:
+        ids_candidatos = [eid for eid in ids_candidatos if _categoria_cal(proximas.get(eid), hoy) == cal]
+
+    total_filtrado = len(ids_candidatos)
+    total_paginas = max(1, -(-total_filtrado // PAGE_SIZE))
+    page = min(max(1, page), total_paginas)
+    ids_pagina = ids_candidatos[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
+
+    equipos = []
+    if ids_pagina:
+        filas = (db.query(models.Equipo)
+                 .options(selectinload(models.Equipo.magnitudes))
+                 .filter(models.Equipo.id.in_(ids_pagina))
+                 .all())
+        orden = {eid: i for i, eid in enumerate(ids_pagina)}
+        equipos = sorted(filas, key=lambda e: orden[e.id])
+
+    return T.TemplateResponse(request, "equipos/lista.html", {
+        "usuario_actual": u, "equipos": equipos, "hoy": hoy,
+        "proximas": proximas, "categoria_cal": lambda eid: _categoria_cal(proximas.get(eid), hoy),
+        "page": page, "total_paginas": total_paginas, "total_filtrado": total_filtrado,
+        "q": q, "estado_filtro": estado, "cal_filtro": cal,
+        "total_general": total_general, "operativos_general": operativos_general,
+        "venc_general": venc_general, "prox_general": prox_general,
+    })
 
 @router.get("/nuevo", response_class=HTMLResponse)
 def nuevo_page(request: Request, db: Session = Depends(get_db)):

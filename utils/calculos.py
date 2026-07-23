@@ -1,4 +1,43 @@
 import math
+from sqlalchemy import func
+
+
+def proxima_calibracion_por_equipo(db):
+    """
+    Devuelve {equipo_id: date|None}: la fecha de próxima calibración más cercana
+    entre las magnitudes activas de cada equipo, según la última calibración
+    registrada de cada magnitud (por fecha_calibracion).
+
+    Calculado en 2-3 consultas agregadas en SQL en vez de recorrer en Python
+    todas las magnitudes/calibraciones de cada equipo — evita el problema N+1
+    que colapsa con miles de equipos (ver auditoría, hallazgo de rendimiento).
+    """
+    import models
+
+    ultima_fecha = (
+        db.query(models.Calibracion.magnitud_id,
+                 func.max(models.Calibracion.fecha_calibracion).label("max_fecha"))
+        .group_by(models.Calibracion.magnitud_id)
+        .subquery()
+    )
+    ultima_cal = (
+        db.query(models.Calibracion.magnitud_id,
+                 models.Calibracion.proxima_calibracion.label("proxima"))
+        .join(ultima_fecha,
+              (models.Calibracion.magnitud_id == ultima_fecha.c.magnitud_id) &
+              (models.Calibracion.fecha_calibracion == ultima_fecha.c.max_fecha))
+        .subquery()
+    )
+    filas = (
+        db.query(models.MagnitudEquipo.equipo_id,
+                 func.min(ultima_cal.c.proxima).label("proxima"))
+        .join(ultima_cal, ultima_cal.c.magnitud_id == models.MagnitudEquipo.id)
+        .filter(models.MagnitudEquipo.activa == True)
+        .group_by(models.MagnitudEquipo.equipo_id)
+        .all()
+    )
+    return {equipo_id: proxima for equipo_id, proxima in filas}
+
 
 def calcular_regresiones(puntos, max_grado=5):
     try:

@@ -2,25 +2,53 @@
 Dashboard — Panel de control principal de MetroGest
 """
 import io
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from database import get_db
 import models, auth
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
 
+# Caché en proceso — el dashboard no necesita exactitud al segundo, y recorre
+# todos los equipos con sus magnitudes/calibraciones/verificaciones/mantenimientos.
+# Evita recalcular en cada reload/export dentro de la misma ventana de tiempo.
+CACHE_TTL_SEGUNDOS = 60
+_cache = {"datos": None, "hoy": None, "expira": None}
+
+
+def _calcular_datos_cacheado(db: Session, hoy: date) -> dict:
+    ahora = datetime.utcnow()
+    if (_cache["datos"] is not None and _cache["hoy"] == hoy
+            and _cache["expira"] and ahora < _cache["expira"]):
+        return _cache["datos"]
+    datos = _calcular_datos(db, hoy)
+    _cache["datos"] = datos
+    _cache["hoy"] = hoy
+    _cache["expira"] = ahora + timedelta(seconds=CACHE_TTL_SEGUNDOS)
+    return datos
+
 
 def _calcular_datos(db: Session, hoy: date) -> dict:
     """Calcula todos los indicadores del dashboard."""
     from dateutil.relativedelta import relativedelta
 
-    equipos = db.query(models.Equipo).filter(
-        models.Equipo.estado != "dado_de_baja"
-    ).order_by(models.Equipo.nombre).all()
+    equipos = (
+        db.query(models.Equipo)
+        .filter(models.Equipo.estado != "dado_de_baja")
+        .options(
+            selectinload(models.Equipo.magnitudes)
+                .selectinload(models.MagnitudEquipo.calibraciones),
+            selectinload(models.Equipo.magnitudes)
+                .selectinload(models.MagnitudEquipo.plan_verificacion)
+                .selectinload(models.PlanVerificacion.verificaciones),
+            selectinload(models.Equipo.mantenimientos),
+        )
+        .order_by(models.Equipo.nombre).all()
+    )
 
     total       = len(equipos)
     operativos  = 0
@@ -181,7 +209,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     if not u:
         return RedirectResponse(url="/usuarios/login")
     hoy = date.today()
-    datos = _calcular_datos(db, hoy)
+    datos = _calcular_datos_cacheado(db, hoy)
     lic = auth.get_licencia_info()
     return T.TemplateResponse(request, "dashboard/dashboard.html", {
         "usuario_actual": u,
@@ -202,7 +230,7 @@ def exportar_pdf(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/dashboard/")
 
     hoy = date.today()
-    datos = _calcular_datos(db, hoy)
+    datos = _calcular_datos_cacheado(db, hoy)
     config = db.query(models.ConfigLaboratorio).first() or models.ConfigLaboratorio()
 
     from utils.pdf_dashboard import generar_pdf_dashboard
@@ -222,7 +250,7 @@ def exportar_excel(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/dashboard/")
 
     hoy = date.today()
-    datos = _calcular_datos(db, hoy)
+    datos = _calcular_datos_cacheado(db, hoy)
     config = db.query(models.ConfigLaboratorio).first() or models.ConfigLaboratorio()
 
     from utils.excel_dashboard import generar_excel_dashboard
