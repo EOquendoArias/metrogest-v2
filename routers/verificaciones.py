@@ -1,5 +1,5 @@
 import io, os, shutil, uuid
-from datetime import date
+from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Request, Form, File, UploadFile, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
@@ -173,13 +173,17 @@ def agregar_punto(vid: int, request: Request,
     ua = ver.plan.umbral_alerta_pct if ver.plan else 70
     uf = ver.plan.umbral_fuera_pct if ver.plan else 100
     res = ("fuera" if desv and desv>=uf else "alerta" if desv and desv>=ua else "ok") if desv is not None else None
-    n = db.query(models.PuntoVerificacion).filter(models.PuntoVerificacion.verificacion_id==vid).count()
+    n = db.query(models.PuntoVerificacion).filter(
+        models.PuntoVerificacion.verificacion_id==vid,
+        models.PuntoVerificacion.eliminado==False).count()
     db.add(models.PuntoVerificacion(verificacion_id=vid, numero_punto=n+1,
         valor_patron=valor_patron, valor_indicado=valor_indicado, error=err,
         tolerancia_inf=ti, tolerancia_sup=ts, desviacion_pct=desv,
         resultado=res, observacion=observacion or None))
     db.flush()
-    pts = db.query(models.PuntoVerificacion).filter(models.PuntoVerificacion.verificacion_id==vid).all()
+    pts = db.query(models.PuntoVerificacion).filter(
+        models.PuntoVerificacion.verificacion_id==vid,
+        models.PuntoVerificacion.eliminado==False).all()
     rs = [p.resultado for p in pts if p.resultado]
     ds = [p.desviacion_pct for p in pts if p.desviacion_pct is not None]
     ver.max_desviacion_pct = max(ds) if ds else None
@@ -207,11 +211,17 @@ def eliminar_punto(vid: int, pid: int, request: Request, db: Session = Depends(g
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
         return RedirectResponse(url=f"/verificaciones/{vid}/puntos")
-    p = db.query(models.PuntoVerificacion).filter(models.PuntoVerificacion.id==pid).first()
+    p = db.query(models.PuntoVerificacion).filter(
+        models.PuntoVerificacion.id==pid,
+        models.PuntoVerificacion.eliminado==False).first()
     if p:
-        db.delete(p); db.flush()
+        p.eliminado = True
+        p.eliminado_en = datetime.now()
+        p.eliminado_por_id = u.id
+        db.flush()
         pts = db.query(models.PuntoVerificacion).filter(
-            models.PuntoVerificacion.verificacion_id==vid
+            models.PuntoVerificacion.verificacion_id==vid,
+            models.PuntoVerificacion.eliminado==False
         ).order_by(models.PuntoVerificacion.numero_punto).all()
         for i, pt in enumerate(pts):
             pt.numero_punto = i + 1

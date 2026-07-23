@@ -157,7 +157,8 @@ def agregar_punto(cid: int, request: Request,
     aeu = round(abs(err) + (u_val or 0), 8)
 
     n = db.query(models.PuntoCalibracion).filter(
-        models.PuntoCalibracion.calibracion_id == cid).count()
+        models.PuntoCalibracion.calibracion_id == cid,
+        models.PuntoCalibracion.eliminado == False).count()
     db.add(models.PuntoCalibracion(
         calibracion_id=cid, numero_punto=n+1,
         valor_patron=valor_patron, valor_indicado=valor_indicado, error=err,
@@ -176,11 +177,17 @@ def eliminar_punto(cid: int, pid: int, request: Request, db: Session = Depends(g
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
         return RedirectResponse(url=f"/analisis/{cid}", status_code=303)
-    p = db.query(models.PuntoCalibracion).filter(models.PuntoCalibracion.id == pid).first()
+    p = db.query(models.PuntoCalibracion).filter(
+        models.PuntoCalibracion.id == pid,
+        models.PuntoCalibracion.eliminado == False).first()
     if p:
-        db.delete(p); db.flush()
+        p.eliminado = True
+        p.eliminado_en = datetime.now()
+        p.eliminado_por_id = u.id
+        db.flush()
         for i, pt in enumerate(db.query(models.PuntoCalibracion).filter(
-            models.PuntoCalibracion.calibracion_id == cid
+            models.PuntoCalibracion.calibracion_id == cid,
+            models.PuntoCalibracion.eliminado == False
         ).order_by(models.PuntoCalibracion.numero_punto).all()):
             pt.numero_punto = i + 1
         db.commit()

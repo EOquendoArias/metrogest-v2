@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, Text, ForeignKey, and_
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -167,6 +167,8 @@ class Calibracion(Base):
     aprobado_por = relationship("Usuario", foreign_keys=[aprobado_por_id])
     puntos       = relationship("PuntoCalibracion", back_populates="calibracion",
                                  cascade="all, delete-orphan",
+                                 primaryjoin="and_(Calibracion.id==PuntoCalibracion.calibracion_id, "
+                                             "PuntoCalibracion.eliminado==False)",
                                  order_by="PuntoCalibracion.numero_punto")
 
 
@@ -185,8 +187,14 @@ class PuntoCalibracion(Base):
     emp_punto         = Column(Float,   nullable=True)
     dentro_tolerancia = Column(Boolean, nullable=True)
     observacion       = Column(String(200), nullable=True)
+    eliminado         = Column(Boolean, default=False, nullable=False)
+    eliminado_en      = Column(DateTime, nullable=True)
+    eliminado_por_id  = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
 
-    calibracion = relationship("Calibracion", back_populates="puntos")
+    calibracion    = relationship("Calibracion",
+                                   back_populates="puntos",
+                                   primaryjoin="Calibracion.id==PuntoCalibracion.calibracion_id")
+    eliminado_por  = relationship("Usuario", foreign_keys=[eliminado_por_id])
 
 
 class EvaluacionRiesgo(Base):
@@ -279,6 +287,8 @@ class VerificacionIntermedia(Base):
     plan     = relationship("PlanVerificacion",  back_populates="verificaciones")
     puntos   = relationship("PuntoVerificacion", back_populates="verificacion",
                              cascade="all, delete-orphan",
+                             primaryjoin="and_(VerificacionIntermedia.id==PuntoVerificacion.verificacion_id, "
+                                         "PuntoVerificacion.eliminado==False)",
                              order_by="PuntoVerificacion.numero_punto")
     equipo   = relationship("Equipo",          foreign_keys=[equipo_id])
     magnitud = relationship("MagnitudEquipo",  foreign_keys=[magnitud_id])
@@ -297,8 +307,14 @@ class PuntoVerificacion(Base):
     desviacion_pct  = Column(Float,   nullable=True)
     resultado       = Column(String(20), nullable=True)
     observacion     = Column(String(200), nullable=True)
+    eliminado         = Column(Boolean, default=False, nullable=False)
+    eliminado_en      = Column(DateTime, nullable=True)
+    eliminado_por_id  = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
 
-    verificacion = relationship("VerificacionIntermedia", back_populates="puntos")
+    verificacion  = relationship("VerificacionIntermedia",
+                                  back_populates="puntos",
+                                  primaryjoin="VerificacionIntermedia.id==PuntoVerificacion.verificacion_id")
+    eliminado_por = relationship("Usuario", foreign_keys=[eliminado_por_id])
 
 
 class PlanMantenimiento(Base):
