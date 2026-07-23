@@ -1,4 +1,4 @@
-import os, shutil, uuid
+import uuid
 from datetime import date
 from fastapi import APIRouter, Request, Form, File, UploadFile, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -6,6 +6,10 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
 import models, auth
+from utils.validar_archivo import (guardar_archivo_validado, EXTENSIONES_DOCUMENTO,
+                                    EXTENSIONES_IMAGEN, MAX_TAMANO_DOCUMENTO_BYTES)
+
+EXTENSIONES_CERTIFICADO = EXTENSIONES_DOCUMENTO | EXTENSIONES_IMAGEN
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
@@ -44,10 +48,9 @@ async def crear(mid: int, request: Request,
     if not mag: raise HTTPException(status_code=404)
     cert_path = None
     if certificado and certificado.filename:
-        ext = os.path.splitext(certificado.filename)[1]
-        n = f"static/certificados/cert_{uuid.uuid4()}{ext}"
-        with open(n,"wb") as f: shutil.copyfileobj(certificado.file, f)
-        cert_path = f"/{n}"
+        n = f"static/certificados/cert_{uuid.uuid4()}"
+        ruta = guardar_archivo_validado(certificado, n, EXTENSIONES_CERTIFICADO, MAX_TAMANO_DOCUMENTO_BYTES)
+        cert_path = f"/{ruta}"
     cal = models.Calibracion(
         magnitud_id=mid, equipo_id=mag.equipo_id,
         numero_certificado=numero_certificado or None,

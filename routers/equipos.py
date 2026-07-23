@@ -1,4 +1,4 @@
-import os, shutil, uuid
+import uuid
 from datetime import date
 from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Request, Form, File, UploadFile, HTTPException, Depends
@@ -10,6 +10,11 @@ from database import get_db
 import models, auth
 import utils.firma_electronica as firma
 from utils.calculos import proxima_calibracion_por_equipo
+from utils.validar_archivo import (guardar_archivo_validado, EXTENSIONES_DOCUMENTO,
+                                    EXTENSIONES_IMAGEN, MAX_TAMANO_IMAGEN_BYTES,
+                                    MAX_TAMANO_DOCUMENTO_BYTES)
+
+EXTENSIONES_MANUAL = EXTENSIONES_DOCUMENTO | EXTENSIONES_IMAGEN
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
@@ -178,10 +183,10 @@ async def crear(request: Request, codigo: str = Form(...), nombre: str = Form(..
              "error": "Fecha inválida. Por favor usa el selector de calendario."})
     def _save(f, prefix):
         if not f or not f.filename: return None
-        ext = os.path.splitext(f.filename)[1]
-        n = f"static/uploads/{prefix}_{uuid.uuid4()}{ext}"
-        with open(n, "wb") as fp: shutil.copyfileobj(f.file, fp)
-        return f"/{n}"
+        permitidas = EXTENSIONES_IMAGEN if prefix == "foto" else EXTENSIONES_MANUAL
+        max_bytes = MAX_TAMANO_IMAGEN_BYTES if prefix == "foto" else MAX_TAMANO_DOCUMENTO_BYTES
+        n = f"static/uploads/{prefix}_{uuid.uuid4()}"
+        return f"/{guardar_archivo_validado(f, n, permitidas, max_bytes)}"
     eq = models.Equipo(
         codigo=codigo, nombre=nombre, descripcion=descripcion or None,
         marca=marca or None, modelo=modelo or None,
@@ -276,10 +281,10 @@ async def editar(eid: int, request: Request,
     if not eq: raise HTTPException(status_code=404)
     def _save(f, prefix):
         if not f or not f.filename: return None
-        ext = os.path.splitext(f.filename)[1]
-        n = f"static/uploads/{prefix}_{uuid.uuid4()}{ext}"
-        with open(n, "wb") as fp: shutil.copyfileobj(f.file, fp)
-        return f"/{n}"
+        permitidas = EXTENSIONES_IMAGEN if prefix == "foto" else EXTENSIONES_MANUAL
+        max_bytes = MAX_TAMANO_IMAGEN_BYTES if prefix == "foto" else MAX_TAMANO_DOCUMENTO_BYTES
+        n = f"static/uploads/{prefix}_{uuid.uuid4()}"
+        return f"/{guardar_archivo_validado(f, n, permitidas, max_bytes)}"
     try:
         fecha_adq = date.fromisoformat(fecha_adquisicion) if fecha_adquisicion else None
     except ValueError:

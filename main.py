@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -44,6 +44,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="MetroGest v2", lifespan=lifespan)
 
+# FORZAR_HTTPS=true cuando el servidor real corra detrás de TLS (ver validación
+# de multi-worker/TLS ya hecha). En local sobre HTTP plano debe quedar en false,
+# si no el navegador nunca enviaría la cookie de sesión y nadie podría loguearse.
+_FORZAR_HTTPS = os.getenv("FORZAR_HTTPS", "false").lower() == "true"
+
 class AuditoriaContextMiddleware(BaseHTTPMiddleware):
     """Deja el id del usuario autenticado disponible para utils/auditoria_trail.py,
     que lo lee desde los listeners de SQLAlchemy al capturar cada cambio."""
@@ -55,6 +60,36 @@ class AuditoriaContextMiddleware(BaseHTTPMiddleware):
             auditoria_trail.usuario_actual_id.reset(token)
 
 app.add_middleware(AuditoriaContextMiddleware)
+
+class CabecerasSeguridadMiddleware(BaseHTTPMiddleware):
+    """
+    Cabeceras de seguridad estándar (OWASP). CSP permite 'unsafe-inline' en
+    script-src/style-src porque casi todas las páginas tienen <script>/<style>
+    inline (ver plantillas) — migrar eso a nonces por request o a archivos .js
+    separados es un refactor propio, no algo para meter de paso aquí.
+    """
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+            "font-src 'self' https://cdnjs.cloudflare.com; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "object-src 'none'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        if _FORZAR_HTTPS:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(CabecerasSeguridadMiddleware)
 
 RUTAS_LIBRES_PASSWORD = {"/usuarios/login", "/usuarios/logout",
                           "/usuarios/cambiar-password-inicial", "/static", "/favicon.ico"}
@@ -87,7 +122,8 @@ if not _session_key or len(_session_key) < 32:
     print("   Ejecuta: python -c \"import secrets; print(secrets.token_hex(32))\"")
     print("   Copia el resultado en .env como SESSION_SECRET=<valor>")
     sys.exit(1)
-app.add_middleware(SessionMiddleware, secret_key=_session_key, max_age=None)
+app.add_middleware(SessionMiddleware, secret_key=_session_key, max_age=None,
+                    https_only=_FORZAR_HTTPS, same_site="lax")
 
 import licencia as lic
 
@@ -113,6 +149,41 @@ app.add_middleware(LicenciaMiddleware)
 
 os.makedirs("static/uploads", exist_ok=True)
 os.makedirs("static/certificados", exist_ok=True)
+
+# static/uploads y static/certificados tienen contenido subido por usuarios
+# (fotos, manuales, certificados de calibración) — antes se servían por el
+# mount público de abajo, sin ninguna verificación de sesión ni rol, así que
+# cualquiera que conociera/adivinara la URL podía descargarlos. Estas dos
+# rutas explícitas capturan esos prefijos ANTES del mount genérico (FastAPI
+# resuelve rutas en el orden en que se registran) y exigen sesión iniciada.
+# Los paths guardados en la BD (ej. "/static/uploads/foto_x.jpg") no cambian.
+_UPLOADS_DIR = os.path.abspath("static/uploads")
+_CERTIFICADOS_DIR = os.path.abspath("static/certificados")
+
+def _servir_archivo_protegido(base_dir: str, nombre: str, request: Request):
+    from starlette.responses import FileResponse
+    db = SessionLocal()
+    try:
+        u = auth.obtener_usuario_actual(request, db)
+    finally:
+        db.close()
+    if not u:
+        return RedirectResponse(url="/usuarios/login")
+    if "/" in nombre or "\\" in nombre or ".." in nombre:
+        raise HTTPException(status_code=404)
+    ruta = os.path.abspath(os.path.join(base_dir, nombre))
+    if not ruta.startswith(base_dir + os.sep) or not os.path.isfile(ruta):
+        raise HTTPException(status_code=404)
+    return FileResponse(ruta)
+
+@app.get("/static/uploads/{nombre}", include_in_schema=False)
+async def servir_upload(nombre: str, request: Request):
+    return _servir_archivo_protegido(_UPLOADS_DIR, nombre, request)
+
+@app.get("/static/certificados/{nombre}", include_in_schema=False)
+async def servir_certificado(nombre: str, request: Request):
+    return _servir_archivo_protegido(_CERTIFICADOS_DIR, nombre, request)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 print("Cargando módulos...")
@@ -217,13 +288,14 @@ async def licencia_vencida_page():
 
 @app.exception_handler(Exception)
 async def err(request: Request, exc: Exception):
-    tb = traceback.format_exc()
-    print(f"\n=== ERROR ===\n{tb}")
-    from fastapi.responses import HTMLResponse
-    msg = str(exc)[:500]
-    html = f"""<html><body style="font-family:monospace;padding:20px;background:#fff5f5;">
+    # El detalle completo (incluye el mensaje de la excepción, que puede traer
+    # datos internos) solo va al log del servidor — nunca a la respuesta HTTP.
+    # Antes se insertaba str(exc) directo en el HTML sin escapar: fuga de
+    # información interna + XSS reflejado si el mensaje traía datos del usuario.
+    print(f"\n=== ERROR === {request.method} {request.url.path}\n{traceback.format_exc()}")
+    html = """<html><body style="font-family:monospace;padding:20px;background:#fff5f5;">
     <h2 style="color:#dc2626">Error del servidor</h2>
-    <pre style="background:#f8fafc;padding:16px;border-radius:8px;overflow:auto">{msg}</pre>
+    <p>Ocurrió un error inesperado. Ya quedó registrado para revisión.</p>
     <p><a href="/">Volver al inicio</a></p>
     </body></html>"""
     return HTMLResponse(content=html, status_code=500)
@@ -232,7 +304,9 @@ async def err(request: Request, exc: Exception):
 def root(): return RedirectResponse(url="/dashboard/")
 
 @app.get("/favicon.ico", include_in_schema=False)
-async def favicon(): return JSONResponse(status_code=204, content={})
+async def favicon():
+    from starlette.responses import Response
+    return Response(status_code=204)  # 204 no debe llevar cuerpo (content={} rompía Content-Length)
 
 if __name__ == "__main__":
     import uvicorn

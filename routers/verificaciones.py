@@ -1,4 +1,4 @@
-import io, os, shutil, uuid
+import io, uuid
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Request, Form, File, UploadFile, HTTPException, Depends
@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models, auth
 import utils.firma_electronica as firma
+from utils.validar_archivo import (guardar_archivo_validado, EXTENSIONES_DOCUMENTO,
+                                    EXTENSIONES_IMAGEN, MAX_TAMANO_DOCUMENTO_BYTES)
+
+EXTENSIONES_ARCHIVO_VERIF = EXTENSIONES_DOCUMENTO | EXTENSIONES_IMAGEN
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
@@ -131,10 +135,9 @@ async def crear(mid: int, request: Request,
     if not mag or not plan: raise HTTPException(status_code=404)
     ap = None
     if archivo and archivo.filename:
-        ext = os.path.splitext(archivo.filename)[1]
-        n = f"static/certificados/verif_{uuid.uuid4()}{ext}"
-        with open(n,"wb") as f: shutil.copyfileobj(archivo.file, f)
-        ap = f"/{n}"
+        n = f"static/certificados/verif_{uuid.uuid4()}"
+        ruta = guardar_archivo_validado(archivo, n, EXTENSIONES_ARCHIVO_VERIF, MAX_TAMANO_DOCUMENTO_BYTES)
+        ap = f"/{ruta}"
     fv = date.fromisoformat(fecha)
     ver = models.VerificacionIntermedia(
         plan_id=plan.id, equipo_id=mag.equipo_id, magnitud_id=mid,

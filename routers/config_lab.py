@@ -1,4 +1,3 @@
-import os, shutil
 from datetime import date
 from fastapi import APIRouter, Request, Form, File, UploadFile, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -6,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
 import models, auth
+from utils.validar_archivo import guardar_archivo_validado, EXTENSIONES_IMAGEN, MAX_TAMANO_IMAGEN_BYTES
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
@@ -37,10 +37,9 @@ async def guardar(request: Request,
     c = db.query(models.ConfigLaboratorio).first()
     if not c: c = models.ConfigLaboratorio(); db.add(c)
     if logo and logo.filename:
-        ext = os.path.splitext(logo.filename)[1]
-        p = f"static/uploads/logo_lab{ext}"
-        with open(p,"wb") as f: shutil.copyfileobj(logo.file, f)
-        c.logo_path = f"/{p}"
+        ruta = guardar_archivo_validado(logo, "static/uploads/logo_lab",
+                                         EXTENSIONES_IMAGEN, MAX_TAMANO_IMAGEN_BYTES)
+        c.logo_path = f"/{ruta}"
     c.nombre=nombre; c.razon_social=razon_social or None
     c.direccion=direccion or None; c.ciudad=ciudad or None
     c.codigo_formato_analisis=codigo_formato_analisis

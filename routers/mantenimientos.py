@@ -1,4 +1,4 @@
-import io, os, shutil, uuid
+import io, uuid
 from datetime import date
 from fastapi import APIRouter, Request, Form, File, UploadFile, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
@@ -6,6 +6,10 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
 import models, auth
+from utils.validar_archivo import (guardar_archivo_validado, EXTENSIONES_DOCUMENTO,
+                                    EXTENSIONES_IMAGEN, MAX_TAMANO_DOCUMENTO_BYTES)
+
+EXTENSIONES_ARCHIVO_MANT = EXTENSIONES_DOCUMENTO | EXTENSIONES_IMAGEN
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
@@ -47,10 +51,9 @@ async def crear(eid: int, request: Request,
         return RedirectResponse(url=f"/mantenimientos/equipo/{eid}")
     ap = None
     if archivo and archivo.filename:
-        ext = os.path.splitext(archivo.filename)[1]
-        n = f"static/certificados/mant_{uuid.uuid4()}{ext}"
-        with open(n, "wb") as f: shutil.copyfileobj(archivo.file, f)
-        ap = f"/{n}"
+        n = f"static/certificados/mant_{uuid.uuid4()}"
+        ruta = guardar_archivo_validado(archivo, n, EXTENSIONES_ARCHIVO_MANT, MAX_TAMANO_DOCUMENTO_BYTES)
+        ap = f"/{ruta}"
     mant = models.Mantenimiento(
         equipo_id=eid, tipo=tipo, origen=origen, titulo=titulo,
         descripcion=descripcion or None,
