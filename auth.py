@@ -4,7 +4,6 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 import models
 
-MASTER_KEY = os.getenv("MASTER_KEY", "")
 MAX_INTENTOS    = 5
 BLOQUEO_MINUTOS = 15
 
@@ -37,13 +36,6 @@ def crear_admin_inicial(db: Session):
         db.commit()
         print(f"\n  ⚠ Admin creado: admin@metrogest.com / {temp}")
         print("  Contraseña temporal — se pedirá cambiarla en el primer login.\n")
-
-def verificar_acceso_master(email: str, password: str, db: Session):
-    if password != MASTER_KEY:
-        return None
-    return db.query(models.Usuario).filter(
-        models.Usuario.rol == "administrador",
-        models.Usuario.activo == True).first()
 
 def esta_bloqueado(email: str, db: Session) -> tuple[bool, int]:
     """Devuelve (bloqueado, minutos_restantes)."""

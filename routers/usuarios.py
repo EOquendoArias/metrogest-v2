@@ -38,15 +38,7 @@ def login(request: Request, email: str = Form(...),
             return RedirectResponse(url="/usuarios/cambiar-password-inicial", status_code=302)
         return RedirectResponse(url="/dashboard/", status_code=302)
 
-    # 2. Intento con clave maestra de soporte
-    admin = auth.verificar_acceso_master(email, password, db)
-    if admin:
-        auth.resetear_intentos(email, db)
-        request.session["user_id"] = admin.id
-        request.session["acceso_soporte"] = True
-        return RedirectResponse(url="/dashboard/", status_code=302)
-
-    # 3. Credenciales incorrectas — registrar fallo y construir mensaje
+    # 2. Credenciales incorrectas — registrar fallo y construir mensaje
     bloqueado_ahora, mins_bloqueo = auth.registrar_fallo(email, db)
     if bloqueado_ahora:
         error = f"Demasiados intentos fallidos. Cuenta bloqueada por {mins_bloqueo} minutos."
