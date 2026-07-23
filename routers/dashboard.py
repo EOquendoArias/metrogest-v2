@@ -6,12 +6,29 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 from database import get_db
 import models, auth
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
+
+
+def _filas_y_totales(db: Session, hoy: date):
+    """
+    Detalle por equipo ('filas') y los totales que faltan para los exportadores
+    del dashboard (costo_anio, proximos_60). Reutiliza la misma lógica ya
+    probada del listado general (routers/auditoria.py) en vez de duplicarla.
+    """
+    from routers.auditoria import _datos as _datos_listado
+
+    filas = sorted(_datos_listado(db, hoy), key=lambda d: (d["dias_cal"] or 9999))
+    proximos_60 = sum(1 for d in filas if d["dias_cal"] is not None and 0 <= d["dias_cal"] <= 60)
+    costo_anio = db.query(func.coalesce(func.sum(models.Calibracion.costo), 0)).filter(
+        func.extract("year", models.Calibracion.fecha_calibracion) == hoy.year
+    ).scalar()
+    return filas, proximos_60, costo_anio
 
 # Caché en proceso — el dashboard no necesita exactitud al segundo, y recorre
 # todos los equipos con sus magnitudes/calibraciones/verificaciones/mantenimientos.
@@ -231,6 +248,8 @@ def exportar_pdf(request: Request, db: Session = Depends(get_db)):
 
     hoy = date.today()
     datos = _calcular_datos_cacheado(db, hoy)
+    filas, proximos_60, costo_anio = _filas_y_totales(db, hoy)
+    datos = {**datos, "filas": filas, "proximos_60": proximos_60, "costo_anio": costo_anio}
     config = db.query(models.ConfigLaboratorio).first() or models.ConfigLaboratorio()
 
     from utils.pdf_dashboard import generar_pdf_dashboard
@@ -251,6 +270,8 @@ def exportar_excel(request: Request, db: Session = Depends(get_db)):
 
     hoy = date.today()
     datos = _calcular_datos_cacheado(db, hoy)
+    filas, proximos_60, costo_anio = _filas_y_totales(db, hoy)
+    datos = {**datos, "filas": filas, "proximos_60": proximos_60, "costo_anio": costo_anio}
     config = db.query(models.ConfigLaboratorio).first() or models.ConfigLaboratorio()
 
     from utils.excel_dashboard import generar_excel_dashboard
