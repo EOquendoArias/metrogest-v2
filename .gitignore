@@ -59,6 +59,10 @@ static/certificados/
 *.log
 logs/
 
+# ─── Respaldos de base de datos ───────────────────────────────────────────────
+backups/
+*.dump
+
 # ─── IDEs ─────────────────────────────────────────────────────────────────────
 # VS Code
 .vscode/
