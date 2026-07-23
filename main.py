@@ -6,9 +6,25 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import RedirectResponse as SR
 from dotenv import load_dotenv
-import os, sys, traceback
+import os, sys, time, logging
+from pathlib import Path
 
 load_dotenv()
+
+# ── Logging estructurado: consola + archivo (mismo patrón que script_alertas.py
+# y backup_db.py). Antes main.py solo usaba print(), sin nivel ni archivo. ──────
+_LOG_DIR = Path(__file__).parent / "logs"
+_LOG_DIR.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.FileHandler(_LOG_DIR / "app.log", encoding="utf-8"),
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+logger = logging.getLogger("metrogest")
 
 from database import engine, Base, SessionLocal
 import models, auth
@@ -19,9 +35,9 @@ Base.metadata.create_all(bind=engine)
 def _import(name):
     try:
         m = __import__(f"routers.{name}", fromlist=[name])
-        print(f"  OK {name}"); return m
+        logger.info("Router cargado: %s", name); return m
     except Exception as e:
-        print(f"  ERROR {name}: {e}"); traceback.print_exc(); return None
+        logger.exception("Error cargando router %s: %s", name, e); return None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -118,9 +134,9 @@ app.add_middleware(ForzarCambioPasswordMiddleware)
 
 _session_key = os.getenv("SESSION_SECRET", "")
 if not _session_key or len(_session_key) < 32:
-    print("\n⛔ ERROR: SESSION_SECRET no está configurado en .env")
-    print("   Ejecuta: python -c \"import secrets; print(secrets.token_hex(32))\"")
-    print("   Copia el resultado en .env como SESSION_SECRET=<valor>")
+    logger.critical("SESSION_SECRET no está configurado en .env. "
+                     "Ejecuta: python -c \"import secrets; print(secrets.token_hex(32))\" "
+                     "y copia el resultado en .env como SESSION_SECRET=<valor>")
     sys.exit(1)
 app.add_middleware(SessionMiddleware, secret_key=_session_key, max_age=None,
                     https_only=_FORZAR_HTTPS, same_site="lax")
@@ -146,6 +162,35 @@ class LicenciaMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 app.add_middleware(LicenciaMiddleware)
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """
+    Log de acceso: método, ruta, status, duración y usuario — sin tener que
+    instrumentar cada endpoint uno por uno. Se registra como la última
+    middleware (queda más externa, ver nota de orden más arriba) para medir
+    el tiempo total incluyendo el resto de la pila.
+    """
+    RUTAS_SIN_RUIDO = ("/static/",)  # css/img/favicon en cada carga de página
+
+    async def dispatch(self, request, call_next):
+        if request.url.path.startswith(self.RUTAS_SIN_RUIDO):
+            return await call_next(request)
+        inicio = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            duracion_ms = (time.perf_counter() - inicio) * 1000
+            logger.exception("%s %s -> excepción sin manejar (%.1fms)",
+                              request.method, request.url.path, duracion_ms)
+            raise
+        duracion_ms = (time.perf_counter() - inicio) * 1000
+        uid = request.session.get("user_id") if hasattr(request, "session") else None
+        nivel = logging.WARNING if response.status_code >= 400 else logging.INFO
+        logger.log(nivel, "%s %s -> %d (%.1fms) usuario=%s",
+                    request.method, request.url.path, response.status_code, duracion_ms, uid or "-")
+        return response
+
+app.add_middleware(RequestLoggingMiddleware)
 
 os.makedirs("static/uploads", exist_ok=True)
 os.makedirs("static/certificados", exist_ok=True)
@@ -186,7 +231,7 @@ async def servir_certificado(nombre: str, request: Request):
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-print("Cargando módulos...")
+logger.info("Cargando módulos...")
 _mods = ["usuarios","equipos","magnitudes","calibraciones","analisis",
          "verificaciones","mantenimientos","config_lab","ilac",
          "dashboard","calendario","plan_mantenimiento","auditoria","notificaciones",
@@ -292,7 +337,7 @@ async def err(request: Request, exc: Exception):
     # datos internos) solo va al log del servidor — nunca a la respuesta HTTP.
     # Antes se insertaba str(exc) directo en el HTML sin escapar: fuga de
     # información interna + XSS reflejado si el mensaje traía datos del usuario.
-    print(f"\n=== ERROR === {request.method} {request.url.path}\n{traceback.format_exc()}")
+    logger.exception("Excepción sin manejar en %s %s", request.method, request.url.path)
     html = """<html><body style="font-family:monospace;padding:20px;background:#fff5f5;">
     <h2 style="color:#dc2626">Error del servidor</h2>
     <p>Ocurrió un error inesperado. Ya quedó registrado para revisión.</p>
