@@ -150,7 +150,15 @@
                  value="{{ verificacion.observaciones or '' }}" placeholder="Conclusiones, decisiones tomadas...">
         </div>
       </div>
-      <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar y cerrar verificación</button>
+      <button type="button" class="btn btn-primary"
+              onclick="solicitarFirma(this.closest('form'), {{ significado_cerrar|tojson }})">
+        <i class="fas fa-signature"></i> Guardar y cerrar verificación
+      </button>
+      {% if error_firma %}
+      <span class="badge badge-danger" style="font-size:11px;padding:6px 12px;margin-left:8px;">
+        <i class="fas fa-circle-exclamation"></i> Contraseña incorrecta — no se guardó
+      </span>
+      {% endif %}
     </form>
   </div>
 </div>

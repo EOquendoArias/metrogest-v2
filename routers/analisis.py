@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
 import models, auth
+import utils.firma_electronica as firma
 from utils.calculos import calcular_regresiones, calcular_semaforo
 
 router = APIRouter()
@@ -99,6 +100,8 @@ def analisis_page(cid: int, request: Request, db: Session = Depends(get_db)):
         "metodo_analisis":         metodo,
         "lagrange_curve":          lagrange_curve,
         "lagrange_warning":        lagrange_warning,
+        "error_firma":             request.query_params.get("error_firma"),
+        "significado_aprobar":     firma.SIGNIFICADOS["aprobar_calibracion"],
         "lagrange_ecuacion":       lagrange_ecuacion,
     })
 
@@ -214,12 +217,19 @@ def sel_regresion(cid: int, request: Request,
 
 @router.post("/{cid}/aprobar")
 def aprobar(cid: int, request: Request,
-            obs_aprobacion: str = Form(""), db: Session = Depends(get_db)):
+            obs_aprobacion: str = Form(""), password: str = Form(""),
+            db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
         return RedirectResponse(url=f"/analisis/{cid}", status_code=303)
     cal = db.query(models.Calibracion).filter(models.Calibracion.id == cid).first()
     if not cal: raise HTTPException(status_code=404)
+
+    ok, error = firma.verificar_y_firmar(db, request, u, password,
+        "calibraciones", cid, "aprobar_calibracion")
+    if not ok:
+        return RedirectResponse(url=f"/analisis/{cid}?error_firma=1", status_code=303)
+
     cal.resultado = "aprobado"
     cal.aprobado_por_id = u.id
     cal.fecha_aprobacion = datetime.now()

@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 from database import get_db
 import models, auth
+import utils.firma_electronica as firma
 from utils.calculos import proxima_calibracion_por_equipo
 
 router = APIRouter()
@@ -246,6 +247,8 @@ def detalle(eid: int, request: Request, db: Session = Depends(get_db)):
         "historial_eventos": _historial_unificado(eq),
         "prox_verif": prox_verif, "prox_verif_dias": prox_verif_dias,
         "prox_mant": prox_mant, "prox_mant_dias": prox_mant_dias,
+        "error_firma": request.query_params.get("error_firma"),
+        "significado_estado": firma.SIGNIFICADOS["cambiar_estado_equipo"],
     })
 
 @router.get("/{eid}/editar", response_class=HTMLResponse)
@@ -298,7 +301,7 @@ async def editar(eid: int, request: Request,
 @router.post("/{eid}/estado")
 def cambiar_estado(eid: int, request: Request,
     nuevo_estado: str = Form(...), motivo: str = Form(""),
-    db: Session = Depends(get_db)):
+    password: str = Form(""), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u: return RedirectResponse(url="/usuarios/login", status_code=303)
     if u.rol == "solo_lectura": return RedirectResponse(url=f"/equipos/{eid}", status_code=303)
@@ -309,5 +312,12 @@ def cambiar_estado(eid: int, request: Request,
         eq.apto_para_uso = True; eq.confirmacion_metrologica = True
     db.add(models.HistorialEstado(equipo_id=eid, usuario_id=u.id,
         estado_anterior=ant, estado_nuevo=nuevo_estado, motivo=motivo or None))
+
+    ok, error = firma.verificar_y_firmar(db, request, u, password,
+        "equipos", eid, "cambiar_estado_equipo")
+    if not ok:
+        db.rollback()
+        return RedirectResponse(url=f"/equipos/{eid}?error_firma=1", status_code=303)
+
     db.commit()
     return RedirectResponse(url=f"/equipos/{eid}", status_code=303)

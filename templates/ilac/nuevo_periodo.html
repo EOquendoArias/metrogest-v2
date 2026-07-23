@@ -72,11 +72,17 @@
           <input type="hidden" name="intervalo" value="12">
           <input type="hidden" name="metodo" value="estandar">
           <input type="hidden" name="justificacion" value="Período estándar de 12 meses">
-          <button type="submit" class="btn btn-primary" style="white-space:nowrap;">
-            <i class="fas fa-check"></i> Aplicar 12 meses
+          <button type="button" class="btn btn-primary" style="white-space:nowrap;"
+                  onclick="solicitarFirma(this.closest('form'), {{ significado_ilac|tojson }})">
+            <i class="fas fa-signature"></i> Aplicar 12 meses
           </button>
         </form>
       </div>
+      {% if error_firma %}
+      <div style="margin-top:10px;"><span class="badge badge-danger" style="font-size:11px;padding:6px 12px;">
+        <i class="fas fa-circle-exclamation"></i> Contraseña incorrecta — no se guardó
+      </span></div>
+      {% endif %}
     </div>
   </div>
 
@@ -117,8 +123,9 @@
           <textarea name="justificacion" class="form-control" rows="3" required
                     placeholder="Ej: Contrato con cliente exige calibración semestral · El equipo se usa en condiciones críticas · Fabricante recomienda cada 18 meses según manual..."></textarea>
         </div>
-        <button type="submit" class="btn btn-outline">
-          <i class="fas fa-save"></i> Guardar período ajustado
+        <button type="button" class="btn btn-outline"
+                onclick="solicitarFirma(this.closest('form'), {{ significado_ilac|tojson }})">
+          <i class="fas fa-signature"></i> Guardar período ajustado
         </button>
       </form>
     </div>

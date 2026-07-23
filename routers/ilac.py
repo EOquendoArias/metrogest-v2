@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
 import models, auth
+import utils.firma_electronica as firma
 from utils.calculos import calcular_intervalo_inicial
 
 router = APIRouter()
@@ -30,6 +31,8 @@ def riesgo_page(mid: int, request: Request, db: Session = Depends(get_db)):
         "ev": ev, "hoy": date.today(), "campos_f": CAMPOS_F,
         "error_exceso": error_exceso,
         "requiere_confirmacion": request.query_params.get("requiere_confirmacion"),
+        "error_firma": request.query_params.get("error_firma"),
+        "significado_ilac": firma.SIGNIFICADOS["definir_intervalo_ilac_riesgo"],
     })
 
 @router.post("/riesgo/{mid}")
@@ -47,6 +50,7 @@ def guardar_riesgo(mid: int, request: Request,
     justificacion_exceso: str=Form(""),
     evaluado_por: str=Form(""),
     confirmar_edicion: str=Form(""),
+    password: str=Form(""),
     db: Session = Depends(get_db)):
 
     u = auth.obtener_usuario_actual(request, db)
@@ -114,6 +118,13 @@ def guardar_riesgo(mid: int, request: Request,
         ci.intervalo_actual_meses = ado
         if ultima:
             ultima.proxima_calibracion = ultima.fecha_calibracion + relativedelta(months=ado)
+
+    ok, error = firma.verificar_y_firmar(db, request, u, password,
+        "magnitudes_equipo", mid, "definir_intervalo_ilac_riesgo")
+    if not ok:
+        db.rollback()
+        return RedirectResponse(url=f"/ilac/riesgo/{mid}?error_firma=1", status_code=302)
+
     db.commit()
     return RedirectResponse(url=f"/ilac/riesgo/{mid}", status_code=302)
 
@@ -159,6 +170,8 @@ def nuevo_periodo_page(mid: int, request: Request, db: Session = Depends(get_db)
         "calibraciones": calibraciones,
         "intervalo_actual": intervalo_actual,
         "modulo_avanzado": modulo_avanzado,
+        "error_firma": request.query_params.get("error_firma"),
+        "significado_ilac": firma.SIGNIFICADOS["definir_intervalo_ilac_estandar"],
     })
 
 @router.post("/periodo/{mid}/guardar")
@@ -166,6 +179,7 @@ def guardar_periodo(mid: int, request: Request,
     intervalo: int = Form(...),
     metodo: str = Form("estandar"),
     justificacion: str = Form(""),
+    password: str = Form(""),
     db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
@@ -203,6 +217,12 @@ def guardar_periodo(mid: int, request: Request,
         motivo=f"{mag.nombre}: período {intervalo} meses ({metodo}). {justificacion}"
     ))
 
+    ok, error = firma.verificar_y_firmar(db, request, u, password,
+        "magnitudes_equipo", mid, "definir_intervalo_ilac_estandar")
+    if not ok:
+        db.rollback()
+        return RedirectResponse(url=f"/ilac/periodo/{mid}?error_firma=1", status_code=302)
+
     db.commit()
     return RedirectResponse(url=f"/calibraciones/magnitud/{mid}", status_code=302)
 
@@ -232,6 +252,8 @@ def deriva_page(mid: int, request: Request, db: Session = Depends(get_db)):
         "equipo":         mag.equipo,
         "analisis":       analisis,
         "error":          request.query_params.get("error"),
+        "error_firma":    request.query_params.get("error_firma"),
+        "significado_ilac": firma.SIGNIFICADOS["definir_intervalo_ilac_deriva"],
     })
 
 
@@ -239,6 +261,7 @@ def deriva_page(mid: int, request: Request, db: Session = Depends(get_db)):
 def aplicar_deriva(mid: int, request: Request,
                    intervalo: int = Form(...),
                    justificacion: str = Form(""),
+                   password: str = Form(""),
                    db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
@@ -275,13 +298,19 @@ def aplicar_deriva(mid: int, request: Request,
         estado_anterior=None, estado_nuevo="periodo_actualizado",
         motivo=f"{mag.nombre}: período {intervalo} meses (deriva M1). {just_final}"))
 
+    ok, error = firma.verificar_y_firmar(db, request, u, password,
+        "magnitudes_equipo", mid, "definir_intervalo_ilac_deriva")
+    if not ok:
+        db.rollback()
+        return RedirectResponse(url=f"/ilac/deriva/{mid}?error_firma=1", status_code=303)
+
     db.commit()
     return RedirectResponse(url=f"/calibraciones/magnitud/{mid}", status_code=303)
 
 
 # ── Helper compartido para aplicar un período avanzado ────────────────────────
 
-def _aplicar_periodo(db, u, mag, mid, intervalo, justificacion, metodo, etiqueta):
+def _aplicar_periodo(db, request, u, mag, mid, intervalo, justificacion, metodo, etiqueta, accion_firma, password):
     """Guarda el intervalo de un método avanzado. Tope 60; >18 exige justificación."""
     intervalo = max(1, min(intervalo, 60))
     if intervalo > 18 and not justificacion.strip():
@@ -307,6 +336,13 @@ def _aplicar_periodo(db, u, mag, mid, intervalo, justificacion, metodo, etiqueta
         equipo_id=mag.equipo_id, usuario_id=u.id,
         estado_anterior=None, estado_nuevo="periodo_actualizado",
         motivo=f"{mag.nombre}: período {intervalo} meses ({etiqueta}). {just_final}"))
+
+    ok, error = firma.verificar_y_firmar(db, request, u, password,
+        "magnitudes_equipo", mid, accion_firma)
+    if not ok:
+        db.rollback()
+        return RedirectResponse(url=f"/ilac/{metodo}/{mid}?error_firma=1", status_code=303)
+
     db.commit()
     return RedirectResponse(url=f"/calibraciones/magnitud/{mid}", status_code=303)
 
@@ -337,19 +373,23 @@ def escalera_page(mid: int, request: Request, db: Session = Depends(get_db)):
     analisis = analizar_escalera(mag, ci)
     return T.TemplateResponse(request, "ilac/escalera.html", {
         "usuario_actual": u, "magnitud": mag, "equipo": mag.equipo,
-        "analisis": analisis, "error": request.query_params.get("error")})
+        "analisis": analisis, "error": request.query_params.get("error"),
+        "error_firma": request.query_params.get("error_firma"),
+        "significado_ilac": firma.SIGNIFICADOS["definir_intervalo_ilac_escalera"]})
 
 
 @router.post("/escalera/{mid}/aplicar")
 def aplicar_escalera(mid: int, request: Request, intervalo: int = Form(...),
-                     justificacion: str = Form(""), db: Session = Depends(get_db)):
+                     justificacion: str = Form(""), password: str = Form(""),
+                     db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
         return RedirectResponse(url=f"/ilac/escalera/{mid}", status_code=303)
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
     if not mag:
         raise HTTPException(status_code=404)
-    return _aplicar_periodo(db, u, mag, mid, intervalo, justificacion, "escalera", "Escalera M4")
+    return _aplicar_periodo(db, request, u, mag, mid, intervalo, justificacion, "escalera", "Escalera M4",
+                             "definir_intervalo_ilac_escalera", password)
 
 
 # ── M2 · CAJA NEGRA ───────────────────────────────────────────────────────────
@@ -367,19 +407,23 @@ def caja_negra_page(mid: int, request: Request, db: Session = Depends(get_db)):
     analisis = analizar_caja_negra(verifs, ci, pv)
     return T.TemplateResponse(request, "ilac/caja_negra.html", {
         "usuario_actual": u, "magnitud": mag, "equipo": mag.equipo,
-        "analisis": analisis, "error": request.query_params.get("error")})
+        "analisis": analisis, "error": request.query_params.get("error"),
+        "error_firma": request.query_params.get("error_firma"),
+        "significado_ilac": firma.SIGNIFICADOS["definir_intervalo_ilac_caja_negra"]})
 
 
 @router.post("/caja-negra/{mid}/aplicar")
 def aplicar_caja_negra(mid: int, request: Request, intervalo: int = Form(...),
-                       justificacion: str = Form(""), db: Session = Depends(get_db)):
+                       justificacion: str = Form(""), password: str = Form(""),
+                       db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
         return RedirectResponse(url=f"/ilac/caja-negra/{mid}", status_code=303)
     mag = db.query(models.MagnitudEquipo).filter(models.MagnitudEquipo.id == mid).first()
     if not mag:
         raise HTTPException(status_code=404)
-    return _aplicar_periodo(db, u, mag, mid, intervalo, justificacion, "caja-negra", "Caja negra M2")
+    return _aplicar_periodo(db, request, u, mag, mid, intervalo, justificacion, "caja-negra", "Caja negra M2",
+                             "definir_intervalo_ilac_caja_negra", password)
 
 
 # ── M3 · HORAS DE USO ─────────────────────────────────────────────────────────
@@ -399,14 +443,17 @@ def horas_page(mid: int, request: Request, db: Session = Depends(get_db)):
     analisis = analizar_horas(ci, _f("limite"), _f("acumuladas"), _f("horas_mes"))
     return T.TemplateResponse(request, "ilac/horas.html", {
         "usuario_actual": u, "magnitud": mag, "equipo": mag.equipo,
-        "analisis": analisis, "error": request.query_params.get("error")})
+        "analisis": analisis, "error": request.query_params.get("error"),
+        "error_firma": request.query_params.get("error_firma"),
+        "significado_ilac": firma.SIGNIFICADOS["definir_intervalo_ilac_horas"]})
 
 
 @router.post("/horas/{mid}/aplicar")
 def aplicar_horas(mid: int, request: Request,
                   limite: float = Form(...), acumuladas: float = Form(0),
                   horas_mes: float = Form(...), intervalo: int = Form(...),
-                  justificacion: str = Form(""), db: Session = Depends(get_db)):
+                  justificacion: str = Form(""), password: str = Form(""),
+                  db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
         return RedirectResponse(url=f"/ilac/horas/{mid}", status_code=303)
@@ -422,7 +469,8 @@ def aplicar_horas(mid: int, request: Request,
         db.add(ci); db.flush()
     ci.horas_uso_limite     = limite
     ci.horas_uso_acumuladas = acumuladas
-    return _aplicar_periodo(db, u, mag, mid, intervalo, justificacion, "horas", "Horas de uso M3")
+    return _aplicar_periodo(db, request, u, mag, mid, intervalo, justificacion, "horas", "Horas de uso M3",
+                             "definir_intervalo_ilac_horas", password)
 
 
 # ── PDFs de los métodos avanzados ─────────────────────────────────────────────

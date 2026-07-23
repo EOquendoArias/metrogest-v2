@@ -408,3 +408,28 @@ class RegistroAuditoria(Base):
     fecha          = Column(DateTime, server_default=func.now(), nullable=False, index=True)
 
     usuario = relationship("Usuario")
+
+
+class FirmaElectronica(Base):
+    """
+    Firma electrónica simple (Ley 527 de 1999 — Colombia): exige reautenticación
+    con contraseña en el momento de firmar (no basta con estar logueado) y deja
+    una declaración explícita del significado del acto firmado. No es firma
+    digital certificada (eso requeriría un proveedor acreditado con
+    infraestructura de llave pública, un proyecto aparte).
+
+    Solo se escribe desde utils/firma_electronica.py, junto con la operación de
+    negocio que firma, dentro de la misma transacción.
+    """
+    __tablename__ = "firmas_electronicas"
+    id                     = Column(Integer, primary_key=True, index=True)
+    tabla                  = Column(String(50), nullable=False, index=True)
+    registro_id            = Column(Integer, nullable=False, index=True)
+    accion                 = Column(String(50), nullable=False, index=True)
+    significado            = Column(Text, nullable=False)
+    usuario_id             = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    usuario_nombre_firmado = Column(String(150), nullable=False)  # snapshot: sobrevive si el usuario cambia de nombre
+    ip                     = Column(String(50), nullable=True)
+    fecha                  = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+
+    usuario = relationship("Usuario")

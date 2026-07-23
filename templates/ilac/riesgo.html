@@ -142,10 +142,16 @@
         </label>
       </div>
       {% endif %}
-      <button type="submit" id="btn-guardar" class="btn btn-primary"
+      <button type="button" id="btn-guardar" class="btn btn-primary"
+              onclick="solicitarFirma(this.closest('form'), {{ significado_ilac|tojson }})"
               {% if ev %}disabled style="opacity:0.5;cursor:not-allowed;"{% endif %}>
-        <i class="fas fa-save"></i> Guardar evaluación de riesgo
+        <i class="fas fa-signature"></i> Guardar evaluación de riesgo
       </button>
+      {% if error_firma %}
+      <span class="badge badge-danger" style="font-size:11px;padding:6px 12px;margin-left:8px;">
+        <i class="fas fa-circle-exclamation"></i> Contraseña incorrecta — no se guardó
+      </span>
+      {% endif %}
     </div>
   </div>
 </form>

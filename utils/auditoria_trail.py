@@ -33,6 +33,7 @@ TABLAS_AUDITADAS = {
     "planes_mantenimiento":       set(),
     "mantenimientos":             set(),
     "config_notificaciones":      set(),
+    "firmas_electronicas":        set(),
 }
 
 # Usuario autenticado de la petición actual — lo setea AuditoriaContextMiddleware

@@ -174,10 +174,16 @@
       <a href="/ilac/periodo/{{ magnitud.id }}" class="btn btn-outline">
         <i class="fas fa-arrow-left"></i> Ver otras opciones
       </a>
-      <button type="submit" class="btn btn-primary">
-        <i class="fas fa-check"></i> Aplicar período
+      <button type="button" class="btn btn-primary"
+              onclick="solicitarFirma(this.closest('form'), {{ significado_ilac|tojson }})">
+        <i class="fas fa-signature"></i> Aplicar período
       </button>
     </div>
+    {% if error_firma %}
+    <div style="margin-top:10px;"><span class="badge badge-danger" style="font-size:11px;padding:6px 12px;">
+      <i class="fas fa-circle-exclamation"></i> Contraseña incorrecta — no se aplicó
+    </span></div>
+    {% endif %}
   </form>
 </div></div>
 

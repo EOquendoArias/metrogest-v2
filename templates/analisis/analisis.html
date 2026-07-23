@@ -9,11 +9,16 @@
 {% if puntos and usuario_actual.rol != 'solo_lectura' and not aprobado %}
 <form method="post" action="/analisis/{{ calibracion.id }}/aprobar" style="display:inline;">
   <input type="hidden" name="obs_aprobacion" value="">
-  <button type="submit" class="btn btn-success"
-          onclick="return confirm('¿Confirmar aprobación? El equipo pasará a OPERATIVO.')">
-    <i class="fas fa-check-circle"></i> Aprobar y poner en uso
+  <button type="button" class="btn btn-success"
+          onclick="solicitarFirma(this.closest('form'), {{ significado_aprobar|tojson }})">
+    <i class="fas fa-signature"></i> Aprobar y poner en uso
   </button>
 </form>
+{% if error_firma %}
+<span class="badge badge-danger" style="font-size:11px;padding:6px 12px;margin-left:8px;">
+  <i class="fas fa-circle-exclamation"></i> Contraseña incorrecta — no se aprobó
+</span>
+{% endif %}
 {% elif aprobado %}
 <span class="badge badge-success" style="font-size:12px;padding:8px 16px;">
   <i class="fas fa-check-circle"></i>

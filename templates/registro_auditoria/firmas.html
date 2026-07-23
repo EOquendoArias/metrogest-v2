@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Firmas electrónicas{% endblock %}
+{% block page_title %}Firmas electrónicas{% endblock %}
+{% block breadcrumb %}Firma electrónica simple (Ley 527 de 1999) — reautenticación + declaración de significado, registro inmutable{% endblock %}
+
+{% block content %}
+<div style="display:flex;gap:8px;margin-bottom:16px;">
+    <a href="/registro-auditoria/" class="btn btn-outline btn-sm"><i class="fas fa-clock-rotate-left"></i> Cambios</a>
+    <a href="/registro-auditoria/firmas" class="btn btn-primary btn-sm"><i class="fas fa-signature"></i> Firmas electrónicas</a>
+</div>
+
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-body">
+        <form method="get" action="/registro-auditoria/firmas" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+                <label style="display:block;font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px;">Tipo de acto firmado</label>
+                <select name="accion" class="form-control" style="min-width:280px;">
+                    <option value="">Todos</option>
+                    {% for valor, etiqueta in acciones_label.items() %}
+                    <option value="{{ valor }}" {% if valor == accion_filtro %}selected{% endif %}>{{ etiqueta }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:4px;">Firmado por</label>
+                <select name="usuario_id" class="form-control" style="min-width:180px;">
+                    <option value="0">Todos</option>
+                    {% for us in usuarios_disponibles %}
+                    <option value="{{ us.id }}" {% if us.id == usuario_filtro %}selected{% endif %}>{{ us.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Filtrar</button>
+            {% if accion_filtro or usuario_filtro %}
+            <a href="/registro-auditoria/firmas" class="btn btn-outline btn-sm">Quitar filtros</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">{{ total }} firma(s)</span>
+    </div>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Firmado por</th>
+                <th>Tipo de acto</th>
+                <th>Registro</th>
+                <th>Declaración firmada</th>
+                <th>IP</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in firmas %}
+            <tr>
+                <td style="font-size:12px;white-space:nowrap;">{{ f.fecha.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                <td style="font-size:13px;font-weight:700;">
+                    {{ f.usuario_nombre_firmado }}
+                    {% if f.usuario and f.usuario.nombre != f.usuario_nombre_firmado %}
+                    <div style="font-size:10px;color:var(--text-muted);font-weight:400;">(hoy: {{ f.usuario.nombre }})</div>
+                    {% endif %}
+                </td>
+                <td style="font-size:12px;">
+                    <span class="badge badge-info">{{ acciones_label.get(f.accion, f.accion) }}</span>
+                </td>
+                <td style="font-size:12px;color:var(--text-muted);">{{ f.tabla }} #{{ f.registro_id }}</td>
+                <td style="font-size:12px;max-width:380px;color:var(--text);">{{ f.significado }}</td>
+                <td style="font-size:11px;color:var(--text-muted);font-family:monospace;">{{ f.ip or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted);">Sin firmas para los filtros seleccionados.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_paginas > 1 %}
+<div style="display:flex;justify-content:center;align-items:center;gap:14px;margin-top:20px;">
+    {% set qs = '&accion=' + accion_filtro if accion_filtro else '' %}
+    {% set qs = qs + '&usuario_id=' + usuario_filtro|string if usuario_filtro else qs %}
+    <a href="/registro-auditoria/firmas?page={{ page - 1 }}{{ qs }}"
+       class="btn btn-sm" style="{% if page <= 1 %}pointer-events:none;opacity:0.4;{% endif %}">
+        <i class="fas fa-chevron-left"></i> Anterior
+    </a>
+    <span style="font-size:13px;color:var(--text-muted);">Página {{ page }} de {{ total_paginas }}</span>
+    <a href="/registro-auditoria/firmas?page={{ page + 1 }}{{ qs }}"
+       class="btn btn-sm" style="{% if page >= total_paginas %}pointer-events:none;opacity:0.4;{% endif %}">
+        Siguiente <i class="fas fa-chevron-right"></i>
+    </a>
+</div>
+{% endif %}
+{% endblock %}

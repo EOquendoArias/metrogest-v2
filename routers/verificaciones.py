@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
 import models, auth
+import utils.firma_electronica as firma
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
@@ -153,7 +154,9 @@ def puntos_page(vid: int, request: Request, db: Session = Depends(get_db)):
     return T.TemplateResponse(request, "verificaciones/puntos.html", {
         "usuario_actual": u, "verificacion": ver, "magnitud": ver.magnitud,
         "equipo": ver.equipo, "plan": ver.plan, "puntos": ver.puntos,
-        "emp": ver.magnitud.emp_valor if ver.magnitud else None})
+        "emp": ver.magnitud.emp_valor if ver.magnitud else None,
+        "error_firma": request.query_params.get("error_firma"),
+        "significado_cerrar": firma.SIGNIFICADOS["cerrar_verificacion"]})
 
 @router.post("/{vid}/punto")
 def agregar_punto(vid: int, request: Request,
@@ -194,12 +197,16 @@ def agregar_punto(vid: int, request: Request,
 @router.post("/{vid}/cerrar")
 def cerrar(vid: int, request: Request,
     accion_tomada: str = Form("ninguna"), observaciones: str = Form(""),
-    db: Session = Depends(get_db)):
+    password: str = Form(""), db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u or u.rol == "solo_lectura":
         return RedirectResponse(url=f"/verificaciones/{vid}/puntos")
     ver = db.query(models.VerificacionIntermedia).filter(models.VerificacionIntermedia.id==vid).first()
     if ver:
+        ok, error = firma.verificar_y_firmar(db, request, u, password,
+            "verificaciones_intermedias", vid, "cerrar_verificacion")
+        if not ok:
+            return RedirectResponse(url=f"/verificaciones/{vid}/puntos?error_firma=1", status_code=303)
         ver.accion_tomada=accion_tomada
         if observaciones: ver.observaciones=observaciones
         db.commit()

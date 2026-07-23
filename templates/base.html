@@ -623,6 +623,32 @@
     </div>
 </div>
 
+{# ── Firma electrónica: modal compartido por todas las acciones que la requieren ── #}
+<div id="firma-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--bg-card);border-radius:16px;padding:32px;max-width:440px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,0.4);">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#1a4f8a,#0f3460);display:flex;align-items:center;justify-content:center;color:white;font-size:17px;flex-shrink:0;">
+        <i class="fas fa-signature"></i>
+      </div>
+      <div>
+        <div style="font-size:16px;font-weight:800;color:var(--text-strong,var(--text));">Firma electrónica</div>
+        <div style="font-size:11px;color:var(--text-muted);">Esta acción queda registrada con tu identidad y la fecha/hora</div>
+      </div>
+    </div>
+    <p id="firma-modal-significado" style="font-size:13px;color:var(--text);background:var(--bg-inset);border-radius:10px;padding:12px 14px;line-height:1.5;margin-bottom:18px;"></p>
+    <label style="display:block;font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Confirma tu contraseña para firmar</label>
+    <input type="password" id="firma-modal-password" placeholder="••••••••" autocomplete="current-password"
+           style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg-inset);color:var(--text);">
+    <p id="firma-modal-error" style="display:none;color:var(--danger);font-size:12px;margin-top:8px;"></p>
+    <div style="display:flex;gap:10px;margin-top:22px;">
+      <button type="button" class="btn btn-outline" style="flex:1;" onclick="cerrarModalFirma()">Cancelar</button>
+      <button type="button" class="btn btn-primary" style="flex:1;" onclick="confirmarFirma()">
+        <i class="fas fa-signature"></i> Firmar y confirmar
+      </button>
+    </div>
+  </div>
+</div>
+
 {% else %}
     {% block content_noauth %}{% endblock %}
 {% endif %}
@@ -630,6 +656,53 @@
 {% block scripts %}{% endblock %}
 
 <script>
+    // ── Firma electrónica ────────────────────────────────────────────────────
+    let _firmaFormPendiente = null;
+
+    function solicitarFirma(form, significado) {
+        _firmaFormPendiente = form;
+        document.getElementById('firma-modal-significado').textContent = significado;
+        document.getElementById('firma-modal-password').value = '';
+        document.getElementById('firma-modal-error').style.display = 'none';
+        document.getElementById('firma-modal').style.display = 'flex';
+        setTimeout(() => document.getElementById('firma-modal-password').focus(), 50);
+    }
+
+    function cerrarModalFirma() {
+        document.getElementById('firma-modal').style.display = 'none';
+        _firmaFormPendiente = null;
+    }
+
+    function confirmarFirma() {
+        const pass = document.getElementById('firma-modal-password').value;
+        const err = document.getElementById('firma-modal-error');
+        if (!pass) {
+            err.textContent = 'Ingresa tu contraseña.';
+            err.style.display = 'block';
+            return;
+        }
+        if (_firmaFormPendiente) {
+            let input = _firmaFormPendiente.querySelector('input[name="password"]');
+            if (!input) {
+                input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'password';
+                _firmaFormPendiente.appendChild(input);
+            }
+            input.value = pass;
+            _firmaFormPendiente.submit();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const pwField = document.getElementById('firma-modal-password');
+        if (pwField) {
+            pwField.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); confirmarFirma(); }
+            });
+        }
+    });
+
     // ── Sidebar móvil ──────────────────────────────────────────────────────
     function toggleSidebar() {
         document.querySelector('.sidebar').classList.toggle('open');

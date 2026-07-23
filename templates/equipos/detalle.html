@@ -485,10 +485,16 @@ a.mg-step:hover .mg-circle { filter: brightness(1.15); transform: scale(1.06); }
           <input type="text" name="motivo" class="form-control"
                  placeholder="Motivo (opcional)" style="font-size:13px;">
         </div>
-        <button type="submit" class="btn btn-primary btn-sm w-full">
-          <i class="fas fa-save"></i> Actualizar estado
+        <button type="button" class="btn btn-primary btn-sm w-full"
+                onclick="solicitarFirma(this.closest('form'), {{ significado_estado|tojson }})">
+          <i class="fas fa-signature"></i> Actualizar estado
         </button>
       </form>
+      {% if error_firma %}
+      <div style="margin-top:8px;"><span class="badge badge-danger" style="font-size:11px;padding:6px 12px;">
+        <i class="fas fa-circle-exclamation"></i> Contraseña incorrecta — no se actualizó
+      </span></div>
+      {% endif %}
       {% endif %}
     </div>
   </div>

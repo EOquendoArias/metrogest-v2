@@ -4,6 +4,10 @@
 {% block breadcrumb %}Quién cambió qué, cuándo — registro inmutable, no editable desde la aplicación{% endblock %}
 
 {% block content %}
+<div style="display:flex;gap:8px;margin-bottom:16px;">
+    <a href="/registro-auditoria/" class="btn btn-primary btn-sm"><i class="fas fa-clock-rotate-left"></i> Cambios</a>
+    <a href="/registro-auditoria/firmas" class="btn btn-outline btn-sm"><i class="fas fa-signature"></i> Firmas electrónicas</a>
+</div>
 <div class="card" style="margin-bottom:20px;">
     <div class="card-body">
         <form method="get" action="/registro-auditoria/" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
