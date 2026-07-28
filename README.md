@@ -52,6 +52,7 @@ MetroGest v2 es una aplicacion web de escritorio (instalacion local) para la ges
 ## Requisitos del sistema
 
 - **Python:** 3.10 o superior
+- **Base de datos:** PostgreSQL 14+ (produccion). SQLite queda como fallback automatico si no se define `DATABASE_URL`, mas indicado solo para pruebas locales rapidas.
 - **Sistema operativo:** Windows 10/11 (probado), Linux/macOS compatible
 - **Disco:** ~200 MB incluyendo entorno virtual
 - **RAM:** 256 MB minimo
@@ -79,22 +80,36 @@ source venv/bin/activate
 # 3. Instalar dependencias
 pip install -r requirements.txt
 
-# 4. (Solo si hay datos existentes de una version anterior) Ejecutar migraciones
-python migrar.py
+# 4. Configurar variables de entorno
+copy .env.example .env
+# Editar .env: DATABASE_URL, SESSION_SECRET, credenciales de correo, etc.
 
-# 5. Iniciar la aplicacion
+# 5. Aplicar migraciones de base de datos (crea/actualiza el esquema en PostgreSQL)
+alembic upgrade head
+
+# 6. Iniciar la aplicacion
 python main.py
 
 # Alternativa en Windows: doble clic en iniciar.bat
+# (crea el entorno virtual, instala dependencias, corre las migraciones
+#  y levanta el servidor, todo en un solo paso)
 ```
 
 Abrir en el navegador: `http://localhost:8000`
 
 **Credenciales iniciales:**
-- Email: `admin@metrogest.com`
-- Contrasena: `admin123`
 
-> **IMPORTANTE:** Cambiar la contrasena del administrador inmediatamente despues del primer acceso.
+En el primer arranque, si no existe ningun usuario, la aplicacion crea automaticamente un administrador (`admin@metrogest.com`) con una **contrasena temporal aleatoria** que se imprime una sola vez en la consola/log (`logs/app.log`) al iniciar. El sistema obliga a cambiarla en el primer login.
+
+> Ya no existe una contrasena por defecto tipo `admin123` — fue eliminada como parte de las mejoras de seguridad (ver seccion "Deuda tecnica").
+
+**¿Olvidaste la contrasena de administrador?** Con el servidor detenido, corre:
+
+```bash
+python resetear_password_admin.py admin@metrogest.com
+```
+
+Esto genera una nueva contrasena temporal para ese usuario y obliga a cambiarla en el proximo login. Requiere acceso directo al servidor (shell/RDP) — es la via de recuperacion soportada, no hay backdoor por la pantalla de login.
 
 ---
 
@@ -107,9 +122,15 @@ metrogest_v2/
 ├── models.py                  # 14 tablas ORM (declarative style)
 ├── auth.py                    # Autenticacion bcrypt, roles, sesion
 ├── licencia.py                # Sistema de licencias HMAC-SHA256 (CLI + API)
-├── migrar.py                  # Migraciones de esquema de BD
+├── migrar.py                  # Migraciones de esquema de BD (legado, ver alembic/)
 ├── migrar_plan_mant.py        # Migracion especifica tabla plan_mantenimiento
-├── iniciar.bat                # Arranque rapido Windows
+├── migrar_a_postgres.py       # Migracion de datos SQLite -> PostgreSQL
+├── alembic/                   # Migraciones de esquema versionadas (alembic upgrade head)
+├── alembic.ini                # Configuracion de Alembic (lee DATABASE_URL de .env)
+├── backup_db.py                # Respaldo automatico de PostgreSQL + verificacion de restauracion
+├── resetear_password_admin.py # Recuperacion de acceso: genera password temporal para un admin
+├── .env / .env.example        # Variables de entorno (no versionar .env)
+├── iniciar.bat                # Arranque rapido Windows (venv + deps + migraciones + servidor)
 ├── requirements.txt           # Dependencias Python
 │
 ├── routers/                   # 13 modulos de rutas
@@ -159,22 +180,36 @@ metrogest_v2/
 
 ---
 
-## Variables de entorno recomendadas
+## Variables de entorno
 
-Actualmente las siguientes configuraciones estan hardcodeadas y **deben moverse a variables de entorno antes de produccion**:
+Configuracion via `.env` (no versionar; ver `.env.example` como plantilla):
 
-| Variable | Ubicacion actual | Descripcion |
-|----------|-----------------|-------------|
-| `SESSION_SECRET_KEY` | `main.py` linea 31 | Clave de firma de sesiones de Starlette |
-| `ADMIN_EMAIL` | `auth.py` | Email del administrador inicial |
-| `ADMIN_PASSWORD` | `auth.py` | Contrasena inicial (admin123) |
-| `DATABASE_URL` | `database.py` | URL de conexion SQLite |
+| Variable | Descripcion |
+|----------|-------------|
+| `SESSION_SECRET` | Clave de firma de sesiones de Starlette |
+| `FORZAR_HTTPS` | `true` solo si el servidor corre detras de HTTPS real (cookie Secure + HSTS). En local sobre HTTP debe quedar en `false` |
+| `DATABASE_URL` | Cadena de conexion SQLAlchemy. Postgres en produccion; si se omite, cae a `sqlite:///./metrogest.db` |
+| `POSTGRES_ADMIN_PASSWORD` | Password del superusuario `postgres`, usado solo por `backup_db.py` para la base temporal de verificacion de respaldos |
+| `BACKUP_RETENCION_DIAS` | Dias que se conservan los `.dump` en `backups/` antes de podarse |
+| `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_USER` / `EMAIL_PASSWORD` / `EMAIL_FROM` | SMTP para alertas de vencimientos y fallos de respaldo |
+| `EMAIL_DESTINATARIO` | Destinatario por defecto de las alertas |
 
-Ejemplo de `.env` (no incluir en el repositorio):
+Ejemplo de `.env`:
 
 ```env
-SESSION_SECRET_KEY=tu-clave-muy-larga-y-aleatoria
-DATABASE_URL=sqlite:///./metrogest.db
+SESSION_SECRET=tu-clave-muy-larga-y-aleatoria
+FORZAR_HTTPS=false
+
+DATABASE_URL=postgresql+psycopg2://usuario:contrasena@localhost:5432/metrogest
+POSTGRES_ADMIN_PASSWORD=
+BACKUP_RETENCION_DIAS=30
+
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=
+EMAIL_PASSWORD=
+EMAIL_FROM=MetroGest <contacto@metrogest.com.co>
+EMAIL_DESTINATARIO=
 ```
 
 ---
@@ -186,9 +221,12 @@ DATABASE_URL=sqlite:///./metrogest.db
 | Backend | FastAPI | 0.136.1 |
 | Servidor ASGI | Uvicorn | 0.46.0 |
 | ORM | SQLAlchemy | 2.0+ |
-| Base de datos | SQLite | 3.x |
+| Base de datos | PostgreSQL (produccion) / SQLite (fallback local) | 14+ / 3.x |
+| Driver PostgreSQL | psycopg2-binary | — |
+| Migraciones de esquema | Alembic | — |
 | Plantillas | Jinja2 | 3.1.6 |
 | Middleware | Starlette (sesiones) | 1.0.0 |
+| Firma de sesiones | itsdangerous | — |
 | Autenticacion | passlib + bcrypt | 1.7.4 / 5.0.0 |
 | PDFs | ReportLab | 4.5.0 |
 | Excel | openpyxl | 3.1.5 |
@@ -311,17 +349,19 @@ python licencia.py verificar
 - [ ] Responsive movil para dashboard y calendario
 
 ### v3.0 (SaaS)
-- [ ] Migracion a PostgreSQL + arquitectura multi-tenant
+- [x] Migracion a PostgreSQL
+- [ ] Arquitectura multi-tenant
 - [ ] Autenticacion JWT con refresh tokens
 - [ ] Panel de administracion SaaS para el proveedor
 - [ ] API REST publica con autenticacion por API key
 
 ### Deuda tecnica
-- [ ] Mover secret keys y credenciales a variables de entorno
-- [ ] Forzar cambio de contrasena admin en primer uso
-- [ ] Configurar logging a archivo rotativo
+- [x] Mover secret keys y credenciales a variables de entorno
+- [x] Forzar cambio de contrasena admin en primer uso
+- [x] Configurar logging a archivo (`logs/app.log`, `logs/backup.log`, `logs/alertas.log`)
 - [ ] Validacion de tamano maximo de archivos subidos
-- [ ] Paginas de error 404/500 personalizadas
+- [x] Pagina de error 500 generica (sin stacktrace al usuario)
+- [ ] Paginas de error 404 personalizada
 
 ---
 

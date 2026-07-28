@@ -5,6 +5,8 @@ jinja2
 python-multipart
 aiofiles
 starlette
+itsdangerous
+openpyxl
 passlib[bcrypt]
 python-dateutil
 numpy
