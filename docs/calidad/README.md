@@ -8,5 +8,5 @@ Entregables planeados en esta carpeta:
 
 - `COBERTURA.md` — matriz de flujos de negocio vs. cobertura de pruebas automatizadas actual (Fase 2.1)
 - `PLAN_PRUEBAS_FUNCIONALES.md` — plan de pruebas de regresión priorizado por flujo crítico (Fase 2.2)
-- `PLAN_PRUEBAS_CARGA.md` — **el entregable central**: plan y resultados de la prueba de carga/concurrencia a escala objetivo (Fase 2.3)
-- `CHECKLIST_SEGURIDAD.md` — checklist de auditoría periódica basado en las brechas ya cerradas (Fase 2.4)
+- `PLAN_PRUEBAS_CARGA.md` — plan y resultados de la prueba de carga/concurrencia a escala objetivo (Fase 2.3)
+- **[`validacion_farma/`](validacion_farma/README.md)** — **ya iniciado**: paquete de Validación de Sistemas Computarizados (CSV) para clientes de industria farmacéutica — Plan Maestro de Validación, gap analysis regulatorio (INVIMA/21 CFR Part 11/EU Annex 11) contra el código real, y protocolos formales IQ/OQ/PQ. Reemplaza y profundiza el `CHECKLIST_SEGURIDAD.md` que se había planeado en la Fase 2.4.

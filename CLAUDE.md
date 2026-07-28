@@ -25,6 +25,15 @@ PostgreSQL y el endurecimiento de seguridad (ver §5) se hicieron *después*
 de esa demo, al caer en cuenta de que SQLite + credenciales hardcodeadas no
 alcanzaban para la escala objetivo ni para producción real.
 
+**Los clientes objetivo incluyen industria farmacéutica.** Eso implica que
+además de "funcionar bien" hay que poder mostrar evidencia documentada de
+validación de sistemas computarizados (CSV) bajo un marco regulatorio de
+integridad de datos — ver `docs/calidad/validacion_farma/` (Plan Maestro
+de Validación, gap analysis regulatorio contra el código real, protocolos
+formales IQ/OQ/PQ). No trates esto como un "nice to have" de documentación:
+para este segmento de cliente es tan importante como que el cálculo del
+semáforo de calibración sea correcto.
+
 ## 2. Stack real (no confundir con `GUIA_PROYECTO.md`, ver §6)
 
 | Capa | Tecnología |

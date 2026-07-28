@@ -12,6 +12,13 @@
   preparado para la escala objetivo.
 - **Objetivo de capacidad:** ~1,600 equipos de medición y 10-20 usuarios
   concurrentes por instalación.
+- Los clientes objetivo incluyen **industria farmacéutica** — eso agrega
+  un requisito adicional: no basta con que el software funcione bien, hay
+  que poder mostrar **evidencia documentada de validación** (CSV) bajo un
+  marco regulatorio de integridad de datos. Ver
+  [`docs/calidad/validacion_farma/`](calidad/validacion_farma/README.md) —
+  ya iniciado (Plan Maestro de Validación, gap analysis contra el código
+  real, protocolos IQ/OQ/PQ).
 - Ya se hizo, como respuesta directa a esto: migración SQLite → PostgreSQL,
   endurecimiento de seguridad completo (ver `CLAUDE.md` §5), paginación y
   caché del dashboard, backups automáticos con restauración probada,
