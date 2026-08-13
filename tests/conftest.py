@@ -84,7 +84,7 @@ def db(engine):
 
 
 @pytest.fixture()
-def client(db, monkeypatch):
+def client(db, monkeypatch, tmp_path):
     """
     TestClient que reutiliza la MISMA sesión `db` (transacción + savepoint)
     para el dependency override de get_db() — así lo que un test prepara
@@ -95,13 +95,33 @@ def client(db, monkeypatch):
     reemplaza por uno vacío: no queremos que cada test dispare esos efectos
     secundarios (creación de usuario, posible envío de correo) contra la
     base de datos de prueba.
-    """
+
+    Licencia por defecto = ACTIVA (hallazgo real, 13-ago-2026): sin esto,
+    `LicenciaMiddleware` lee `licencia._ARCHIVO` (por defecto
+    `licencia.json` en la raíz del proyecto), que en la máquina de Edison
+    SÍ existe (licencia real de su instalación) pero en CI (checkout limpio,
+    `licencia.json` está en `.gitignore`) NUNCA existe — así que cualquier
+    test que no controle la licencia explícitamente redirige a
+    `/sin-licencia` en vez de ejecutar el flujo real que quiere probar. Esto
+    pasó inadvertido porque correr los tests localmente contra el repo real
+    de Edison "funciona por accidente" gracias a su licencia.json real.
+    `test_ciclo_vida_licencia.py` sigue controlando la licencia explícitamente
+    por test vía su propia fixture `licencia_controlada`, que sobreescribe
+    esto (se declara después de `client` en la firma de esos tests, así que
+    su `monkeypatch.setattr` corre después y gana)."""
     from contextlib import asynccontextmanager
 
     from fastapi.testclient import TestClient
 
     import database as database_module
+    import licencia as licencia_module
     import main as main_module
+
+    ruta_licencia = tmp_path / "licencia_test_default.json"
+    monkeypatch.setattr(licencia_module, "_ARCHIVO", ruta_licencia)
+    datos = licencia_module.generar_licencia("Cliente de prueba (CI)", "2099-12-31", [])
+    ruta_licencia.write_text(__import__("json").dumps(datos), encoding="utf-8")
+    licencia_module.invalidar_cache()
 
     @asynccontextmanager
     async def _lifespan_vacio(app):
@@ -121,5 +141,7 @@ def client(db, monkeypatch):
 
     with TestClient(main_module.app) as c:
         yield c
+
+    licencia_module.invalidar_cache()
 
     main_module.app.dependency_overrides.clear()
