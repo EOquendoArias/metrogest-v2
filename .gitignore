@@ -68,6 +68,14 @@ backups/
 # desechable — nunca son de una instalación real, pero no se comparten igual.
 usuarios_carga*.json
 
+# ─── Fixtures de prueba del importador de migración (docs/migracion/) ────────
+# Excel generados por generar_excel_prueba_*.py y Registros de Desviaciones
+# que quedan al correr importar_excel.py — regenerables con un comando, no
+# son código fuente ni evidencia real de un cliente.
+excel_prueba*.xlsx
+excel_fase5*.xlsx
+Registro_Desviaciones_*.xlsx
+
 # ─── IDEs ─────────────────────────────────────────────────────────────────────
 # VS Code
 .vscode/

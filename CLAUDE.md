@@ -168,3 +168,25 @@ El plan de trabajo completo (documentación técnica, plan de calidad y
 pruebas de carga, documentación para presentar a clientes) vive en
 **`docs/PROJECT_PLAN.md`**. Ese documento tiene las fases, y cada fase
 apunta a la carpeta de `docs/` donde debe quedar el resultado.
+
+Además del roadmap original, hay una línea de trabajo separada y ya
+avanzada: **migración de datos históricos de clientes desde Excel**
+(`docs/migracion/`, ver `docs/PROJECT_PLAN.md` §4.1 para el resumen de
+estado). El importador (`importar_excel.py`, raíz del repo) cubre el MVP
+(Equipos/Magnitudes/Calibraciones/Puntos) y la Fase 5 (Verificaciones
+intermedias, Evaluación de riesgo ILAC, Mantenimientos) — ambos
+**verificados de punta a punta contra Postgres real**, no solo en
+sandbox. Si vas a tocar `importar_excel.py`, lee primero
+`docs/migracion/README.md` (índice) y `docs/migracion/
+GUIA_VALIDACION_Y_DESVIACIONES.md` §3 (regla de negocio sobre qué
+significa "aceptar" una desviación de Capa 3 — ya tiene un hallazgo real
+documentado, no es solo teoría).
+
+**Para continuidad entre sesiones/espacios de trabajo:** este archivo
+(`CLAUDE.md`) se carga automáticamente en cualquier sesión de Claude/Cowork
+abierta sobre esta carpeta — es la memoria de trabajo. Si abres un Project
+de claude.ai aparte (fuera de esta carpeta), no hereda esto automáticamente
+— ver `docs/CLAUDE_PROJECT_SETUP.md` para replicar el contexto ahí (texto
+de instrucciones personalizadas + lista de archivos a subir como
+Knowledge). Mantenlo actualizado junto con este archivo cuando el trabajo
+avance de forma importante.

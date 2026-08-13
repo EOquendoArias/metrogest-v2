@@ -57,6 +57,16 @@ las reglas de la sección 7 de CLAUDE.md (nunca hardcodear secretos, todo
 cambio de esquema vía Alembic, nunca borrar datos reales sin aprobación
 explícita, correr pytest antes de dar por bueno un cambio de lógica de
 negocio).
+
+Hay además una línea de trabajo aparte, ya avanzada: migración de datos
+históricos de clientes desde Excel (carpeta docs/migracion/, código
+importar_excel.py en la raíz). Cubre el MVP (Equipos/Magnitudes/
+Calibraciones) y la Fase 5 (Verificaciones intermedias, Evaluación de
+riesgo ILAC, Mantenimientos) — ambos verificados de punta a punta contra
+Postgres real, no solo en sandbox. Si el trabajo toca esa herramienta, lee
+primero docs/migracion/README.md y GUIA_VALIDACION_Y_DESVIACIONES.md §3
+antes de proponer cambios — ya hay reglas de negocio y un hallazgo real
+documentados ahí, no hay que redescubrirlos.
 ```
 
 ## Archivos a subir como Knowledge
@@ -70,6 +80,9 @@ Recomendado (orden de prioridad):
    pregunta sobre estructura de datos sin tener que describirla de nuevo
 5. `MetroGest_Brief_Seguridad_Licencias.md` — histórico, pero útil como
    registro de qué brechas de seguridad se cerraron y cómo
+6. `docs/migracion/README.md` — si el trabajo del Project incluye la línea
+   de migración de datos de clientes (índice de esa carpeta, con el estado
+   real de cada documento)
 
 **No subir `GUIA_PROYECTO.md`** salvo que quieras usarlo específicamente
 para consultar la intención de diseño original — sus datos técnicos
