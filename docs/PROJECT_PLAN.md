@@ -27,13 +27,13 @@
   equipos / 10-20 usuarios" es una prueba de carga real — eso es el centro
   de la Línea 2 (§2.3).
 
-## 1. Línea 1 — Documentación técnica (`docs/arquitectura/`)
+## 1. Línea 1 — Documentación técnica (`docs/arquitectura/`) — ✅ Completa (12-ago-2026)
 
 | Fase | Entregable | Contenido |
 |---|---|---|
-| 1.1 | `docs/arquitectura/ARQUITECTURA.md` | Diagrama y descripción de la arquitectura actual: FastAPI + Jinja2 SSR + PostgreSQL, capa de routers vs. capa de servicios (`services/`, aún parcial), middlewares en orden real (auditoría → cabeceras de seguridad → forzar cambio de password → sesión → licencia → logging de requests), esquema de BD (18 tablas, relaciones clave). |
-| 1.2 | `docs/arquitectura/DECISIONES.md` | Registro de decisiones de diseño relevantes (formato tipo ADR corto): por qué Postgres y no seguir en SQLite, por qué Alembic, por qué firma electrónica simple y no PKI, por qué HMAC propio para licencias en vez de un proveedor externo. Sirve para no repetir discusiones ni revertir decisiones por accidente. |
-| 1.3 | Runbook operativo | Ya cubierto en buena parte por `README.md` (instalación, arranque, backup, recuperación de contraseña). Esta fase es solo *completar huecos* si aparecen durante la Línea 2 (ej. qué hacer si falla una migración en producción del cliente). |
+| 1.1 | `docs/arquitectura/ARQUITECTURA.md` | **Hecho.** Diagrama y descripción de la arquitectura actual: FastAPI + Jinja2 SSR + PostgreSQL, capa de routers vs. capa de servicios (`services/`, aún parcial — solo `analisis_service.py` y `verificaciones_service.py`), los 6 middlewares en orden real con la advertencia de diseño sobre `RequestLoggingMiddleware`/`SessionMiddleware` que ya causó un bug real, esquema de BD (20 tablas, no 18 — agrupadas por dominio, con los patrones de soft-delete y auditoría automática). |
+| 1.2 | `docs/arquitectura/DECISIONES.md` | **Hecho.** ADR-001 (por qué `ProcessPoolExecutor` + workers de Uvicorn y no una cola externa, con resultados medidos en 4 corridas de carga). Los otros ADR candidatos (Postgres vs. SQLite, Alembic, firma simple vs. PKI, HMAC propio) quedan pendientes de redactar — no bloquean, se documentan si vuelve a surgir la discusión. |
+| 1.3 | Runbook operativo | Cubierto por `README.md` (instalación, arranque, backup, recuperación de contraseña) — ya incorporó los huecos que salieron de la Línea 2 (RAM real medida, `UVICORN_WORKERS`, tarea programada de alertas obligatoria). |
 
 **No se duplica** contenido que ya vive en `README.md` o `CLAUDE.md` —
 `ARQUITECTURA.md` enlaza a esos archivos en vez de repetirlos.
@@ -121,14 +121,34 @@ prueba (ej. "dashboard responde en <2s con 1,600 equipos y 15 usuarios
 concurrentes navegando"), para que el resultado sea un sí/no verificable y
 no una impresión subjetiva.
 
-### 2.4 Checklist de seguridad recurrente
+### 2.4 Checklist de seguridad recurrente — ✅ Hecho (12-ago-2026)
 
-`docs/calidad/CHECKLIST_SEGURIDAD.md` — convierte las 6 brechas ya cerradas
-(`CLAUDE.md` §5) en una checklist de auditoría periódica (ej. antes de cada
-entrega a un nuevo cliente), para no depender de la memoria de una sesión
-de Claude puntual.
+`docs/calidad/CHECKLIST_SEGURIDAD.md` — convierte las 6 brechas cerradas de
+`CLAUDE.md` §5 (bloque A) más el endurecimiento posterior (bloque B: rate
+limiting, RBAC, cabeceras HTTP, validación de archivos, archivos protegidos,
+página 500 genérica, auditoría automática, soft-delete, firma electrónica,
+backups) en una checklist de auditoría **repetible**, pensada para marcarse
+antes de cada entrega a un cliente nuevo — no depende de la memoria de una
+sesión puntual de Claude.
 
-## 3. Línea 3 — Documentación para clientes (`docs/cliente/`)
+Cada ítem queda marcado como **Automatizado** (referencia al archivo de
+test exacto que lo cubre) o **Manual** (comando o revisión de código
+puntual, cuando no es automatizable con pytest). Se identificaron 3
+desviaciones abiertas durante la redacción — quedan registradas en el
+propio documento, no bloquean la fase:
+
+1. Cabeceras de seguridad HTTP (`CabecerasSeguridadMiddleware`) sin test.
+2. Validación de archivos subidos (extensión/tamaño) sin test.
+3. Servido de archivos protegidos por sesión sin test.
+
+Además el documento deja explícita una advertencia de diseño real (no
+teórica): el `@app.exception_handler(Exception)` genérico de `main.py` **no**
+protege contra excepciones lanzadas dentro de middlewares personalizados
+— exactamente la causa del bug de `RequestLoggingMiddleware` corregido en
+la Fase 2.2 (ítem 3). Cualquier middleware nuevo debe manejar sus propias
+excepciones.
+
+## 3. Línea 3 — Documentación para clientes (`docs/cliente/`) — ✅ Completa (12-ago-2026)
 
 Dos documentos separados, para dos audiencias distintas (decisión ya
 tomada con el usuario):
@@ -145,13 +165,80 @@ soportada sin una prueba de carga que lo respalde.
 ## 4. Secuencia recomendada
 
 1. ~~Fundar el proyecto: `CLAUDE.md` + esta estructura de `docs/`~~ (esta fase)
-2. Línea 2, fase 2.1 — inventario de cobertura (rápido, ya hay mucho hecho)
-3. Línea 2, fase 2.3 — plan y ejecución de prueba de carga (es la que
-   responde la pregunta de negocio que motivó todo esto)
+2. ~~Línea 2, fase 2.1 — inventario de cobertura~~ → `docs/calidad/COBERTURA.md`.
+   Hallazgo principal: 82 endpoints reales, solo 3 con test HTTP directo;
+   ningún flujo de negocio completo tiene test de integración. Define el
+   orden de la fase 2.2.
+3. Línea 2, fase 2.3 — plan de prueba de carga: **secciones 1-6 ya
+   redactadas** en `docs/calidad/PLAN_PRUEBAS_CARGA.md` (herramienta Locust,
+   dataset sintético de 1,600 equipos, riesgos de arquitectura). Falta
+   ejecutar el runbook (§9 de ese documento — pasos que corre Edison
+   localmente) y llenar secciones 7-8 con resultados reales.
 4. Línea 1 completa (arquitectura + decisiones) — más fácil de escribir bien
    una vez que la prueba de carga confirma o corrige supuestos de diseño
 5. Línea 3 (documentos de cliente) — al final, para que cite datos reales
    en vez de promesas
+
+## 4.1 Línea nueva — Importación de datos históricos de clientes (`docs/migracion/`)
+
+No estaba en el alcance original de este documento (documentación/calidad/
+venta de lo ya construido) — surgió el 12-ago-2026 al revisar con Edison
+un servicio que ya cobra de forma independiente: cargar el historial de un
+cliente (hasta 5 años, ~1,600 equipos) dentro de MetroGest. Se verificó
+que **hoy no existe ninguna herramienta de importación desde Excel** — es
+un vacío de producto real. Ver `docs/migracion/PLAN_IMPORTACION_EXCEL.md`
+para el diseño técnico (arquitectura Power Query + importador Python,
+esquema de plantilla, validación y detección de duplicados en 3 niveles)
+y `docs/migracion/GUIA_VALIDACION_Y_DESVIACIONES.md` para el framework de
+*proceso* (checklist de preparación, clasificación de desviaciones por
+severidad, Registro de Desviaciones, flujo de resolución conjunta con el
+cliente) — este último ya se puede aplicar conceptualmente aunque el
+importador todavía no exista en código.
+**Estado (actualizado 12-ago-2026):** diseño y framework de proceso
+completos; `importar_excel.py` construido y **verificado de punta a punta
+contra Postgres real** (`metrogest_carga`) — lectura, 5 niveles de
+validación (14/14 errores deliberados detectados), escritura transaccional,
+rastro de auditoría y detección de duplicados en 3 capas, todo con
+evidencia real (ver `PLAN_IMPORTACION_EXCEL.md` §9-§10). En esa
+verificación se encontró y corrigió un bug real: el rastro de auditoría no
+se generaba para las cargas del importador (el módulo que engancha los
+listeners de SQLAlchemy nunca se importaba en ese proceso) — reverificado
+con éxito tras el fix. Listo técnicamente para usarse con un cliente real.
+Fase 3 (receta de Power Query) también lista —
+`docs/migracion/RECETA_POWER_QUERY.md`, metodología reutilizable, sin
+probar todavía contra un Excel real de cliente. Se decidió que esa receta
+es documentación **interna** (el know-how del servicio que Edison cobra
+aparte, no algo que el cliente opera); lo que sí se entrega al cliente es
+`docs/cliente/GUIA_PREPARACION_DATOS.md` (nuevo, checklist de preparación
+en lenguaje simple, tercer documento de la Línea 3).
+Fase 5 también construida y verificada de punta a punta contra Postgres
+real (12-ago/13-ago-2026, `docs/migracion/PLAN_FASE5_EXTENSIONES.md`): 6
+hojas nuevas opcionales (Verificaciones intermedias, Evaluación de riesgo
+ILAC, Mantenimientos). La regla de ILAC deriva el intervalo adoptado del
+historial real de calibraciones (criterio de negocio de Edison, verificado
+contra `routers/ilac.py` real, no inventado) — confirmado con datos reales
+en Postgres: intervalo derivado correctamente (6 meses) de dos
+calibraciones separadas ese intervalo. Un hallazgo real sobre el
+significado de "aceptar" una desviación Alta de Capa 3 (inserta la fila,
+no la omite) quedó documentado en `GUIA_VALIDACION_Y_DESVIACIONES.md` §3.
+**Corregido y verificado contra Postgres real (13-ago-2026):** el
+importador ya no confía ciegamente en `Resuelta - corregida en origen` —
+si esa clave reaparece, sigue bloqueando `--ejecutar`; solo `Aceptada`
+(decisión consciente) deja pasar e inserta. Ver
+`PLAN_FASE5_EXTENSIONES.md` §7.1 para el detalle y la evidencia.
+Fase 6 (documentación operativa final) también hecha (13-ago-2026):
+`docs/migracion/GUIA_OPERATIVA_MIGRACION.md` es el punto de entrada único
+para correr una migración real de cliente de principio a fin, con los
+comandos exactos y los problemas reales ya encontrados en el camino
+(contraseñas mal puestas, ediciones de Excel no guardadas, versión de
+Postgres). Con esto las 6 fases de `PLAN_IMPORTACION_EXCEL.md` §2 quedan
+completas. El pendiente de agregar al checklist de instalación (IQ) la
+verificación de la versión real de Postgres del cliente también se cerró
+(13-ago-2026): `docs/calidad/validacion_farma/IQ_CALIFICACION_INSTALACION.md`
+ítem IQ-3 nuevo, y el ítem de backup (ahora IQ-12) exige que la corrida
+manual de `backup_db.py` haya sido probada, no solo la tarea programada
+— no era solo documentación, es un ítem de auditoría con criterio de
+aceptación verificable.
 
 ## 5. Relación con el Project de claude.ai
 
