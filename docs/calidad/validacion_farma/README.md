@@ -34,10 +34,15 @@ mercado del cliente, más un anexo de diferencias específico por marco
 
 ## Relación con el resto del plan de calidad
 
-- El **gap analysis** (este documento) reemplaza y profundiza el
-  `CHECKLIST_SEGURIDAD.md` planeado en la Fase 2.4 del plan general — ya no
-  hace falta un documento aparte, este lo cubre con marco regulatorio
-  explícito.
+- El **gap analysis** (este documento) y `../CHECKLIST_SEGURIDAD.md`
+  (Fase 2.4, sí se escribió — nota de 12-ago-2026, corrige lo que decía
+  antes esta sección) son complementarios, no duplicados: el gap analysis
+  es una lectura *regulatoria* de una sola vez (requisito GxP × estado del
+  código, con marco explícito ALCOA+/21 CFR 11/EU Annex 11), mientras que
+  `CHECKLIST_SEGURIDAD.md` es una checklist *operativa* y repetible
+  (automatizado vs. manual, pensada para marcarse antes de cada entrega a
+  un cliente nuevo). Este documento cita al otro para la brecha #16
+  (validación IQ/OQ/PQ), no lo reemplaza.
 - El **PQ** reutiliza directamente los resultados de la prueba de carga de
   la Fase 2.3 (1,600 equipos / 10-20 usuarios concurrentes) — no se duplica
   el trabajo, se referencia como evidencia de desempeño.
