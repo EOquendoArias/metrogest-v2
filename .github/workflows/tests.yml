@@ -29,7 +29,16 @@ jobs:
       # La app nunca corre contra esta URL — es la base de PRUEBA que la CI
       # crea y destruye en cada corrida (ver services.postgres arriba).
       TEST_DATABASE_URL: postgresql+psycopg2://metrogest:metrogest_ci@localhost:5432/metrogest_test
-      SESSION_SECRET: 0000000000000000000000000000000000000000000000000000000000000000
+      # Comillas obligatorias y NO usar un valor solo de dígitos: YAML
+      # interpreta un escalar sin comillas hecho solo de ceros como el
+      # entero octal 0 (no como texto), y GitHub Actions lo pasa al proceso
+      # como la variable de entorno SESSION_SECRET="0" (1 caracter) en vez
+      # de los 68 ceros que se ven aquí. Eso hace que main.py (chequeo
+      # `len(SESSION_SECRET) < 32`) aborte con sys.exit(1) al importar la
+      # app — exactamente el bug real que rompía toda la suite de tests
+      # que usan la fixture `client` (hallazgo del 13-ago-2026, ver
+      # docs/PROJECT_PLAN.md). Verificado con `yaml.safe_load()`.
+      SESSION_SECRET: "ci-test-secret-0123456789abcdef0123456789abcdef0123456789abcdef01"
 
     steps:
       - uses: actions/checkout@v4
