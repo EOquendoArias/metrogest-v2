@@ -1,5 +1,7 @@
+import asyncio
 import io
 from datetime import date
+from functools import partial
 from fastapi import APIRouter, Request, Form, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -8,6 +10,8 @@ from database import get_db
 import models, auth
 import utils.firma_electronica as firma
 from utils.calculos import calcular_regresiones
+from utils.orm_snapshot import snapshot
+from utils.pdf_executor import pool as _pdf_pool
 import services.analisis_service as svc
 
 router = APIRouter()
@@ -140,7 +144,7 @@ def aprobar(cid: int, request: Request,
 # ── PDF ───────────────────────────────────────────────────────────────────────
 
 @router.get("/{cid}/pdf")
-def pdf(cid: int, request: Request, db: Session = Depends(get_db)):
+async def pdf(cid: int, request: Request, db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u: return RedirectResponse(url="/usuarios/login")
     cal = svc.obtener_calibracion(db, cid)
@@ -148,9 +152,23 @@ def pdf(cid: int, request: Request, db: Session = Depends(get_db)):
     regs = calcular_regresiones(cal.puntos) if len(cal.puntos) >= 2 else []
     config = db.query(models.ConfigLaboratorio).first() or models.ConfigLaboratorio()
     usar_u = cal.usar_incertidumbre if hasattr(cal, "usar_incertidumbre") else True
+
+    # Tocar (mientras la sesión sigue abierta) todas las relaciones que
+    # utils/pdf_analisis.py navega, para que snapshot() las encuentre ya
+    # cargadas — ver ADR-001 y utils/orm_snapshot.py.
+    mag = cal.magnitud
+    _ = mag.equipo if mag else None
+    _ = mag.config_ilac if mag else None
+    _ = cal.aprobado_por
+
     from utils.pdf_analisis import generar_pdf_analisis
-    pdf_bytes = generar_pdf_analisis(cal, cal.puntos, regs,
-                                     cal.grado_regresion_sel, u, config, usar_u)
+    cal_snap = snapshot(cal)
+    loop = asyncio.get_running_loop()
+    pdf_bytes = await loop.run_in_executor(
+        _pdf_pool,
+        partial(generar_pdf_analisis, cal_snap, cal_snap.puntos, regs,
+                cal.grado_regresion_sel, snapshot(u), snapshot(config), usar_u),
+    )
     nombre = f"analisis_{cal.numero_certificado or cid}_{date.today().strftime('%Y%m%d')}.pdf"
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={nombre}"})

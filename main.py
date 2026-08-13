@@ -29,6 +29,7 @@ logger = logging.getLogger("metrogest")
 from database import engine, Base, SessionLocal
 import models, auth
 import utils.auditoria_trail as auditoria_trail  # registra los listeners de auditoría al importarse
+from utils.pdf_executor import pool as _pdf_executor  # ver ADR-001
 
 Base.metadata.create_all(bind=engine)
 
@@ -50,13 +51,18 @@ async def lifespan(app: FastAPI):
             cfg = models.ConfigNotificaciones()
             cfg.email_destinatario = os.getenv("EMAIL_DESTINATARIO", "")
             db.add(cfg); db.commit()
-        from utils.alertas_calibracion import (verificar_calibraciones_por_vencer,
-                                               verificar_licencia_por_vencer)
-        verificar_licencia_por_vencer(db)
-        verificar_calibraciones_por_vencer(db)
+        # La revisión de alertas de calibración/licencia YA NO se dispara aquí
+        # (ver ADR-001 en docs/arquitectura/DECISIONES.md): con varios workers
+        # de Uvicorn (--workers), cada uno corre su propio lifespan al arrancar,
+        # así que mandaba las mismas alertas por correo una vez por worker.
+        # Además, disparar la revisión solo al reiniciar el servidor no
+        # garantizaba una alerta diaria real. La tarea programada de Windows
+        # (`configurar_tarea_windows.bat` → `script_alertas.py`, todos los
+        # días a las 8:00 AM) es ahora la única vía — ver README.md.
     finally:
         db.close()
     yield
+    _pdf_executor.shutdown(wait=False)
 
 app = FastAPI(title="MetroGest v2", lifespan=lifespan)
 
@@ -184,7 +190,18 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                               request.method, request.url.path, duracion_ms)
             raise
         duracion_ms = (time.perf_counter() - inicio) * 1000
-        uid = request.session.get("user_id") if hasattr(request, "session") else None
+        # request.session es una property que lanza AssertionError (no
+        # AttributeError) si SessionMiddleware nunca llegó a tocar este
+        # scope — hasattr() no protege contra eso, solo contra
+        # AttributeError. Pasa exactamente cuando LicenciaMiddleware
+        # corta la cadena ANTES de SessionMiddleware (redirect a
+        # /sin-licencia o /licencia-vencida, ver docs/calidad/
+        # PLAN_PRUEBAS_FUNCIONALES.md ítem 3): sin este chequeo correcto,
+        # esas dos páginas — las que deberían avisarle al cliente que su
+        # licencia venció, en vez de mostrarle una app "rota" — crasheaban
+        # con un 500 sin manejar. Chequear la clave en scope (un dict
+        # plano) sí es seguro.
+        uid = request.session.get("user_id") if "session" in request.scope else None
         nivel = logging.WARNING if response.status_code >= 400 else logging.INFO
         logger.log(nivel, "%s %s -> %d (%.1fms) usuario=%s",
                     request.method, request.url.path, response.status_code, duracion_ms, uid or "-")

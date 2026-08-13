@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from dateutil.relativedelta import relativedelta
 from database import get_db
 import models, auth
@@ -56,9 +56,23 @@ def _calcular_verif(eq, hoy):
 
 
 def _datos(db, hoy):
-    equipos = db.query(models.Equipo).filter(
-        models.Equipo.estado != "dado_de_baja"
-    ).order_by(models.Equipo.nombre).all()
+    # selectinload evita N+1 queries al recorrer 1,600 equipos (antes esta
+    # función cargaba magnitudes/calibraciones/verificaciones/mantenimientos
+    # perezosamente, una consulta por relación por equipo). Mismas opciones
+    # que ya usa routers/dashboard.py:_calcular_datos — ver ADR-001.
+    equipos = (
+        db.query(models.Equipo)
+        .filter(models.Equipo.estado != "dado_de_baja")
+        .options(
+            selectinload(models.Equipo.magnitudes)
+                .selectinload(models.MagnitudEquipo.calibraciones),
+            selectinload(models.Equipo.magnitudes)
+                .selectinload(models.MagnitudEquipo.plan_verificacion)
+                .selectinload(models.PlanVerificacion.verificaciones),
+            selectinload(models.Equipo.mantenimientos),
+        )
+        .order_by(models.Equipo.nombre).all()
+    )
     out = []
     for eq in equipos:
         uc = pc = dc = None

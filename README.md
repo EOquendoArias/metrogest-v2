@@ -44,6 +44,9 @@ MetroGest v2 es una aplicacion web de escritorio (instalacion local) para la ges
 | Dashboard | KPIs en tiempo real: equipos operativos, calibraciones vencidas, proximas actividades (30 dias) |
 | Calendario | Vista mensual de calibraciones, verificaciones y mantenimientos programados |
 | Auditoria | Listado de estado de todos los equipos con fechas proximas |
+| Registro de auditoria | Bitacora de cambios (`registro_auditoria.py`): quien cambio que campo y cuando, mas el listado de firmas electronicas (aprobaciones, cierres) — solo administrador |
+| Notificaciones | Configuracion de alertas por email (que avisos enviar y a quien) y envio de correo de prueba SMTP — solo administrador |
+| Busqueda global | Barra de busqueda del sidebar: equipos y certificados de calibracion por texto |
 | Config. Laboratorio | Nombre, logo, codigos de formato de documentos, firmantes para PDFs |
 | Usuarios | Roles: administrador, operador, solo_lectura |
 
@@ -55,7 +58,7 @@ MetroGest v2 es una aplicacion web de escritorio (instalacion local) para la ges
 - **Base de datos:** PostgreSQL 14+ (produccion). SQLite queda como fallback automatico si no se define `DATABASE_URL`, mas indicado solo para pruebas locales rapidas.
 - **Sistema operativo:** Windows 10/11 (probado), Linux/macOS compatible
 - **Disco:** ~200 MB incluyendo entorno virtual
-- **RAM:** 256 MB minimo
+- **RAM:** con `UVICORN_WORKERS=1` (valor por defecto) el consumo es bajo (proceso único de Python). Con `UVICORN_WORKERS=4` (configuracion recomendada para varios usuarios concurrentes, ver `docs/arquitectura/DECISIONES.md` ADR-001), el proceso completo de MetroGest usa **~2.5 GB en carga sostenida** (medido con 15 usuarios concurrentes y 1,600 equipos, ver `docs/calidad/PLAN_PRUEBAS_CARGA.md` §7) — cada worker HTTP mas sus 2 subprocesos de generacion de PDF/Excel cargan su propia copia de Python y de librerias pesadas (numpy, matplotlib, reportlab). Ese numero es solo el proceso de MetroGest; hay que sumarle aparte PostgreSQL y el sistema operativo. **Recomendado: al menos 4 GB de RAM dedicados a la instalacion completa** (MetroGest + Postgres + SO) como punto de partida
 - **Puerto:** 8000 (configurable en `main.py`)
 - **Navegador:** cualquier navegador moderno (Chrome, Firefox, Edge)
 
@@ -95,6 +98,22 @@ python main.py
 #  y levanta el servidor, todo en un solo paso)
 ```
 
+### 7. Configurar la tarea diaria de alertas (paso obligatorio)
+
+```bash
+# Windows, con el servidor detenido o corriendo (da igual):
+configurar_tarea_windows.bat
+```
+
+Instala una tarea programada de Windows que corre `script_alertas.py` todos
+los días a las 8:00 AM y manda por correo los avisos de calibraciones por
+vencer y de licencia próxima a vencer. **Es el único mecanismo que dispara
+esas alertas** — antes de ago-2026 el servidor las revisaba también al
+arrancar, pero eso mandaba alertas duplicadas si se corría con varios
+workers (`UVICORN_WORKERS > 1`, ver más abajo) y no garantizaba una revisión
+diaria real si el servidor no se reiniciaba. Sin este paso, las alertas
+simplemente no se envían.
+
 Abrir en el navegador: `http://localhost:8000`
 
 **Credenciales iniciales:**
@@ -119,7 +138,7 @@ Esto genera una nueva contrasena temporal para ese usuario y obliga a cambiarla 
 metrogest_v2/
 ├── main.py                    # Punto de entrada FastAPI, registro de routers, lifespan
 ├── database.py                # Engine SQLAlchemy, dependencia get_db()
-├── models.py                  # 14 tablas ORM (declarative style)
+├── models.py                  # 20 tablas ORM (declarative style)
 ├── auth.py                    # Autenticacion bcrypt, roles, sesion
 ├── licencia.py                # Sistema de licencias HMAC-SHA256 (CLI + API)
 ├── migrar.py                  # Migraciones de esquema de BD (legado, ver alembic/)
@@ -133,7 +152,7 @@ metrogest_v2/
 ├── iniciar.bat                # Arranque rapido Windows (venv + deps + migraciones + servidor)
 ├── requirements.txt           # Dependencias Python
 │
-├── routers/                   # 13 modulos de rutas
+├── routers/                   # 16 modulos de rutas
 │   ├── usuarios.py            # Login, logout, gestion de usuarios
 │   ├── equipos.py             # CRUD equipos + historial unificado
 │   ├── magnitudes.py          # CRUD magnitudes por equipo
@@ -146,9 +165,12 @@ metrogest_v2/
 │   ├── dashboard.py           # KPIs, exportar PDF y Excel
 │   ├── calendario.py          # Vista mensual de actividades
 │   ├── config_lab.py          # Configuracion del laboratorio
-│   └── auditoria.py           # Listado general con exportacion
+│   ├── auditoria.py           # Listado general con exportacion
+│   ├── registro_auditoria.py  # Bitacora de cambios + listado de firmas electronicas
+│   ├── notificaciones.py      # Configuracion de alertas por email + envio de prueba SMTP
+│   └── busqueda.py            # Busqueda global (equipos, certificados) para el sidebar
 │
-├── templates/                 # 25 plantillas Jinja2
+├── templates/                 # 35 plantillas Jinja2
 │   ├── base.html              # Layout maestro con sidebar
 │   ├── login.html
 │   ├── equipos/               # lista.html, formulario.html, detalle.html
@@ -162,7 +184,9 @@ metrogest_v2/
 │   ├── calendario/            # calendario.html
 │   ├── config_lab/            # config.html
 │   ├── usuarios/              # formulario.html, lista.html
-│   └── auditoria/             # resumen.html
+│   ├── auditoria/             # resumen.html
+│   ├── registro_auditoria/    # lista.html, firmas.html
+│   └── notificaciones/        # config.html
 │
 ├── utils/                     # Logica de negocio y generacion de documentos
 │   ├── calculos.py            # Regresion polinomial, semaforo, calculo ILAC
@@ -193,6 +217,8 @@ Configuracion via `.env` (no versionar; ver `.env.example` como plantilla):
 | `BACKUP_RETENCION_DIAS` | Dias que se conservan los `.dump` en `backups/` antes de podarse |
 | `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_USER` / `EMAIL_PASSWORD` / `EMAIL_FROM` | SMTP para alertas de vencimientos y fallos de respaldo |
 | `EMAIL_DESTINATARIO` | Destinatario por defecto de las alertas |
+| `UVICORN_WORKERS` | Procesos de Uvicorn a levantar (`iniciar.bat`). Default `1`. Subirlo (ej. `4`) reparte la carga HTTP entre procesos — recomendado a partir de varios usuarios concurrentes, ver `docs/arquitectura/DECISIONES.md` (ADR-001) para el análisis completo. Cada worker es un proceso Python completo: sube el uso de RAM y las conexiones a Postgres proporcionalmente — verificar contra la RAM del servidor y `max_connections` de Postgres antes de subirlo en producción. |
+| `PDF_EXECUTOR_WORKERS` | Procesos dedicados a generar PDF/Excel (`utils/pdf_executor.py`), separados de los workers HTTP de arriba. Default `2`. No necesita tocarse salvo que el servidor tenga muchos núcleos disponibles. |
 
 Ejemplo de `.env`:
 
@@ -210,6 +236,9 @@ EMAIL_USER=
 EMAIL_PASSWORD=
 EMAIL_FROM=MetroGest <contacto@metrogest.com.co>
 EMAIL_DESTINATARIO=
+
+UVICORN_WORKERS=1
+PDF_EXECUTOR_WORKERS=2
 ```
 
 ---
@@ -359,7 +388,7 @@ python licencia.py verificar
 - [x] Mover secret keys y credenciales a variables de entorno
 - [x] Forzar cambio de contrasena admin en primer uso
 - [x] Configurar logging a archivo (`logs/app.log`, `logs/backup.log`, `logs/alertas.log`)
-- [ ] Validacion de tamano maximo de archivos subidos
+- [x] Validacion de tipo y tamano maximo de archivos subidos (`utils/validar_archivo.py` — imagenes 5MB, documentos 15MB; ver `docs/calidad/CHECKLIST_SEGURIDAD.md` item B4: implementado, pendiente agregarle test automatizado)
 - [x] Pagina de error 500 generica (sin stacktrace al usuario)
 - [ ] Paginas de error 404 personalizada
 

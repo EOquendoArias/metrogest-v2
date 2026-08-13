@@ -33,8 +33,13 @@ echo  Iniciando servidor...
 rem  Abre el navegador tras 4 segundos, en segundo plano
 start "" cmd /c "timeout /t 4 /nobreak >nul & start http://127.0.0.1:8000"
 
+rem  UVICORN_WORKERS viene de .env (ver ADR-001, docs\arquitectura\DECISIONES.md).
+rem  Default 1 = comportamiento identico al de siempre, un solo proceso.
+set "WORKERS=1"
+for /f "usebackq delims=" %%W in (`venv\Scripts\python -c "from dotenv import dotenv_values; print(dotenv_values('.env').get('UVICORN_WORKERS') or '1')"`) do set "WORKERS=%%W"
+
 echo.
-echo  Servidor en http://127.0.0.1:8000
+echo  Servidor en http://127.0.0.1:8000  (UVICORN_WORKERS=%WORKERS%)
 echo  Primer arranque: la contrasena de admin se genera sola y sale en logs\app.log
 echo  ¿La olvidaste? python resetear_password_admin.py admin@metrogest.com
 echo  Cierra esta ventana para detener MetroGest
@@ -43,7 +48,11 @@ echo.
 rem  uvicorn en PRIMER PLANO: al cerrar esta ventana el servidor se detiene.
 rem  (Antes usaba "start /b", que dejaba el proceso vivo bloqueando el puerto 8000
 rem   y hacia que al reabrir siguiera corriendo el codigo viejo.)
-python -m uvicorn main:app --host 127.0.0.1 --port 8000
+if "%WORKERS%"=="1" (
+    python -m uvicorn main:app --host 127.0.0.1 --port 8000
+) else (
+    python -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers %WORKERS%
+)
 echo.
 echo  === El servidor se detuvo. Revisa el error de arriba. ===
 pause

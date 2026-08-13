@@ -203,7 +203,20 @@ def seleccionar_regresion(db, cal, grado: int):
 def aprobar_calibracion(db, request, u, cal, obs_aprobacion: str, password: str):
     """Firma electrónica + efectos secundarios de aprobar una calibración
     (poner el equipo operativo y dejar constancia en su historial de estado).
-    Retorna (ok: bool, error: str | None)."""
+    Retorna (ok: bool, error: str | None).
+
+    Guardia agregada tras la prueba de carga de la Fase 2.3 (ver
+    docs/calidad/PLAN_PRUEBAS_CARGA.md §7, hallazgo PQ-7): sin esto, la
+    plantilla oculta el botón "Aprobar" una vez `aprobado=True`, pero el
+    endpoint en sí no validaba nada — una petición POST directa (o una
+    pestaña vieja del navegador) podía re-firmar una calibración ya
+    aprobada sin aviso, sobrescribiendo `aprobado_por_id`/`fecha_aprobacion`.
+    No perdía nada del rastro de auditoría (cada reaprobación quedaba
+    firmada y auditada igual), pero permitía reaprobaciones sin límite.
+    """
+    if cal.resultado == "aprobado":
+        return False, "Esta calibración ya fue aprobada — no se puede volver a aprobar."
+
     ok, error = firma.verificar_y_firmar(db, request, u, password,
         "calibraciones", cal.id, "aprobar_calibracion")
     if not ok:

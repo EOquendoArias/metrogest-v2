@@ -63,6 +63,11 @@ logs/
 backups/
 *.dump
 
+# ─── Fixtures de prueba de carga (Fase 2.3) ───────────────────────────────────
+# Credenciales generadas por seed_carga_masiva.py para la BD de prueba/staging
+# desechable — nunca son de una instalación real, pero no se comparten igual.
+usuarios_carga*.json
+
 # ─── IDEs ─────────────────────────────────────────────────────────────────────
 # VS Code
 .vscode/

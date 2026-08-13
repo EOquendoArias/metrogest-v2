@@ -183,13 +183,34 @@ def eliminar_punto(db, vid: int, pid: int, usuario_id: int):
     ).order_by(models.PuntoVerificacion.numero_punto).all()
     for i, pt in enumerate(pts):
         pt.numero_punto = i + 1
+    # Bug encontrado en la Fase 2.2 (docs/calidad/PLAN_PRUEBAS_FUNCIONALES.md
+    # ítem 5): a diferencia de agregar_punto/agregar_puntos_lote, esta
+    # función no recalculaba `resultado` tras eliminar un punto — si el
+    # punto eliminado era el único "fuera" o "alerta", la verificación
+    # quedaba marcada reprobada/en alerta indefinidamente aunque los puntos
+    # restantes estuvieran todos ok.
+    ver = db.query(models.VerificacionIntermedia).filter(
+        models.VerificacionIntermedia.id == vid).first()
+    if ver:
+        recalcular_resultado_verificacion(db, ver)
     db.commit()
     return True
 
 
 def cerrar_verificacion(db, request, u, ver, accion_tomada, observaciones, password):
     """Firma electrónica + guardado de la acción tomada y observaciones
-    finales de la verificación. Retorna (ok: bool, error: str | None)."""
+    finales de la verificación. Retorna (ok: bool, error: str | None).
+
+    Guardia agregada en la Fase 2.2 (docs/calidad/PLAN_PRUEBAS_FUNCIONALES.md
+    ítem 5), mismo patrón que la guardia anti-reaprobación de
+    services/analisis_service.py::aprobar_calibracion tras el hallazgo de
+    PQ-7: sin esto, un segundo POST a este endpoint (petición directa o
+    pestaña vieja del navegador) podía re-firmar una verificación ya
+    cerrada, sobrescribiendo accion_tomada/observaciones sin aviso.
+    """
+    if ver.accion_tomada is not None:
+        return False, "Esta verificación ya fue cerrada — no se puede volver a cerrar."
+
     ok, error = firma.verificar_y_firmar(db, request, u, password,
         "verificaciones_intermedias", ver.id, "cerrar_verificacion")
     if not ok:

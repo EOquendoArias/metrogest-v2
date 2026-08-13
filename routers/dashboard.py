@@ -1,8 +1,10 @@
 """
 Dashboard — Panel de control principal de MetroGest
 """
+import asyncio
 import io
 from datetime import date, datetime, timedelta, timezone
+from functools import partial
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -10,6 +12,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 from database import get_db
 import models, auth
+from utils.orm_snapshot import snapshot
+from utils.pdf_executor import pool as _pdf_pool
 
 router = APIRouter()
 T = Jinja2Templates(directory="templates")
@@ -35,6 +39,11 @@ def _filas_y_totales(db: Session, hoy: date):
 # Evita recalcular en cada reload/export dentro de la misma ventana de tiempo.
 CACHE_TTL_SEGUNDOS = 60
 _cache = {"datos": None, "hoy": None, "expira": None}
+# Caché aparte para las filas de detalle que solo usan los exportadores
+# (PDF/Excel) — antes se recalculaban SIN caché en cada export, recorriendo
+# los 1,600 equipos otra vez encima del cálculo ya cacheado de KPIs. Ver
+# ADR-001 en docs/arquitectura/DECISIONES.md.
+_cache_filas = {"filas": None, "hoy": None, "expira": None}
 
 
 def _calcular_datos_cacheado(db: Session, hoy: date) -> dict:
@@ -47,6 +56,27 @@ def _calcular_datos_cacheado(db: Session, hoy: date) -> dict:
     _cache["hoy"] = hoy
     _cache["expira"] = ahora + timedelta(seconds=CACHE_TTL_SEGUNDOS)
     return datos
+
+
+def _filas_y_totales_cacheado(db: Session, hoy: date):
+    """Como _filas_y_totales, pero cacheado — y a propósito cachea el
+    resultado ya convertido a snapshot plano (nunca objetos ORM vivos): un
+    objeto ORM cacheado de una petición anterior queda atado a una sesión ya
+    cerrada, y aunque SQLAlchemy tolera leer atributos ya cargados en un
+    objeto "detached", es un riesgo innecesario de arrastrar entre
+    peticiones. El resto del módulo (`_cache` de KPIs) ya sigue esta misma
+    regla: solo se cachean datos planos. Ver ADR-001."""
+    ahora = datetime.now(timezone.utc)
+    if (_cache_filas["filas"] is not None and _cache_filas["hoy"] == hoy
+            and _cache_filas["expira"] and ahora < _cache_filas["expira"]):
+        return _cache_filas["filas"]
+    filas, proximos_60, costo_anio = _filas_y_totales(db, hoy)
+    filas_snap = [{**f, "equipo": snapshot(f["equipo"])} for f in filas]
+    resultado = (filas_snap, proximos_60, costo_anio)
+    _cache_filas["filas"] = resultado
+    _cache_filas["hoy"] = hoy
+    _cache_filas["expira"] = ahora + timedelta(seconds=CACHE_TTL_SEGUNDOS)
+    return resultado
 
 
 def _calcular_datos(db: Session, hoy: date) -> dict:
@@ -239,8 +269,18 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     })
 
 
+def _datos_export_snapshot(db: Session, hoy: date) -> dict:
+    """Arma el dict `datos` que consumen los generadores de PDF/Excel del
+    dashboard. `_filas_y_totales_cacheado` ya devuelve las filas como
+    snapshot plano (picklable) — necesario para poder mandar `datos` a un
+    proceso hijo vía ProcessPoolExecutor. Ver ADR-001."""
+    datos = _calcular_datos_cacheado(db, hoy)
+    filas, proximos_60, costo_anio = _filas_y_totales_cacheado(db, hoy)
+    return {**datos, "filas": filas, "proximos_60": proximos_60, "costo_anio": costo_anio}
+
+
 @router.get("/pdf")
-def exportar_pdf(request: Request, db: Session = Depends(get_db)):
+async def exportar_pdf(request: Request, db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u:
         return RedirectResponse(url="/usuarios/login")
@@ -250,20 +290,22 @@ def exportar_pdf(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/dashboard/")
 
     hoy = date.today()
-    datos = _calcular_datos_cacheado(db, hoy)
-    filas, proximos_60, costo_anio = _filas_y_totales(db, hoy)
-    datos = {**datos, "filas": filas, "proximos_60": proximos_60, "costo_anio": costo_anio}
+    datos = _datos_export_snapshot(db, hoy)
     config = db.query(models.ConfigLaboratorio).first() or models.ConfigLaboratorio()
 
     from utils.pdf_dashboard import generar_pdf_dashboard
-    pdf_bytes = generar_pdf_dashboard(datos, hoy, u, config)
+    loop = asyncio.get_running_loop()
+    pdf_bytes = await loop.run_in_executor(
+        _pdf_pool,
+        partial(generar_pdf_dashboard, datos, hoy, snapshot(u), snapshot(config)),
+    )
     nombre = f"dashboard_metrogest_{hoy.strftime('%Y%m%d')}.pdf"
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={nombre}"})
 
 
 @router.get("/excel")
-def exportar_excel(request: Request, db: Session = Depends(get_db)):
+async def exportar_excel(request: Request, db: Session = Depends(get_db)):
     u = auth.obtener_usuario_actual(request, db)
     if not u:
         return RedirectResponse(url="/usuarios/login")
@@ -272,13 +314,15 @@ def exportar_excel(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/dashboard/")
 
     hoy = date.today()
-    datos = _calcular_datos_cacheado(db, hoy)
-    filas, proximos_60, costo_anio = _filas_y_totales(db, hoy)
-    datos = {**datos, "filas": filas, "proximos_60": proximos_60, "costo_anio": costo_anio}
+    datos = _datos_export_snapshot(db, hoy)
     config = db.query(models.ConfigLaboratorio).first() or models.ConfigLaboratorio()
 
     from utils.excel_dashboard import generar_excel_dashboard
-    excel_bytes = generar_excel_dashboard(datos, hoy, config)
+    loop = asyncio.get_running_loop()
+    excel_bytes = await loop.run_in_executor(
+        _pdf_pool,
+        partial(generar_excel_dashboard, datos, hoy, snapshot(config)),
+    )
     nombre = f"equipos_metrogest_{hoy.strftime('%Y%m%d')}.xlsx"
     return StreamingResponse(
         io.BytesIO(excel_bytes),
